@@ -1,0 +1,36 @@
+{
+    // IntelliSense 설정 — .cproject(Debug 구성)의 -D/-I/MCU 플래그를 그대로 반영
+    "version": 4,
+    "configurations": [
+        {
+            "name": "STM32L432 Debug",
+            "compilerPath": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344\\tools\\bin\\arm-none-eabi-gcc.exe",
+            "compilerArgs": [
+                "-mcpu=cortex-m4",
+                "-mthumb",
+                "-mfpu=fpv4-sp-d16",
+                "-mfloat-abi=hard"
+            ],
+            "cStandard": "gnu11",
+            "intelliSenseMode": "windows-gcc-arm",
+            "defines": [
+                "STM32L432xx"
+            ],
+            "includePath": [
+                "${workspaceFolder}/src",
+                "${workspaceFolder}/src/ap",
+                "${workspaceFolder}/src/bsp",
+                "${workspaceFolder}/src/common",
+                "${workspaceFolder}/../shared",
+                "${workspaceFolder}/src/common/core",
+                "${workspaceFolder}/src/common/hw/include",
+                "${workspaceFolder}/src/hw",
+                "${workspaceFolder}/src/hw/driver/fatfs",
+                "${workspaceFolder}/src/lib/cube_l432/Drivers/CMSIS/Device/ST/STM32L4xx/Include",
+                "${workspaceFolder}/src/lib/cube_l432/Drivers/CMSIS/Include",
+                "${workspaceFolder}/src/lib/cube_l432/Drivers/STM32L4xx_HAL_Driver/Inc",
+                "${workspaceFolder}/src/lib/FatFs/src"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,33 @@
+{
+    // cortex-debug + CubeIDE 번들 ST-LINK_gdbserver 사용.
+    // 툴 경로(armToolchainPath, stlinkPath, stm32cubeprogrammer)는 STM32F411.code-workspace의 settings에 있음.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug l432kc (ST-LINK)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/Debug/stm32l432kc.elf",
+            "servertype": "stlink",
+            "device": "STM32L432KC",
+            "interface": "swd",
+            "serverArgs": ["--frequency", "4000"],
+            "runToEntryPoint": "main",
+            "svdFile": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.productdb.debug_2.2.200.202506131328\\resources\\cmsis\\STMicroelectronics_CMSIS_SVD\\STM32L432.svd",
+            "preLaunchTask": "Build (fast, make)"
+        },
+        {
+            "name": "Attach l432kc (ST-LINK, no reset)",
+            "type": "cortex-debug",
+            "request": "attach",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/Debug/stm32l432kc.elf",
+            "servertype": "stlink",
+            "device": "STM32L432KC",
+            "interface": "swd",
+            "serverArgs": ["--frequency", "4000"],
+            "svdFile": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.productdb.debug_2.2.200.202506131328\\resources\\cmsis\\STMicroelectronics_CMSIS_SVD\\STM32L432.svd"
+        }
+    ]
+}

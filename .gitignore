@@ -1,0 +1,41 @@
+# =========================
+# STM32CubeIDE build output
+# =========================
+Debug/
+Release/
+
+# Build artifacts
+*.o
+*.d
+*.su
+*.cyclo
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+
+# =========================
+# Eclipse / CubeIDE workspace
+# =========================
+.metadata/
+
+# 개인/자동 생성 IDE 설정
+.settings/language.settings.xml
+
+# Debug launch config
+*.launch
+
+# Python IDE metadata
+*.pydevproject
+
+# =========================
+# TouchGFX
+# =========================
+TouchGFX/build/
+
+# =========================
+# OS / misc
+# =========================
+.DS_Store
+Thumbs.db

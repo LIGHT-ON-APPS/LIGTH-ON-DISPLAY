@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextDatabase xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="texts.xsd" Version="4.26.1">
+  <Languages>
+    <Language Id="GB" />
+  </Languages>
+  <Texts>
+    <TextGroup Id="Group1">
+      <Text Id="T_Status" Alignment="Center" TypographyId="Default"><Translation Language="GB">READY</Translation></Text>
+      <Text Id="T_StatusFault" Alignment="Center" TypographyId="Default"><Translation Language="GB">FAULT</Translation></Text>
+      <Text Id="T_DataLost" Alignment="Center" TypographyId="Default"><Translation Language="GB">NO DATA</Translation></Text>
+      <Text Id="T_Soc" Alignment="Center" TypographyId="Battery"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_Rpm" Alignment="Center" TypographyId="Rpm"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_RpmUnit" Alignment="Center" TypographyId="Label"><Translation Language="GB">RPM</Translation></Text>
+      <Text Id="T_PackVLabel" Alignment="Center" TypographyId="Label"><Translation Language="GB">PACK</Translation></Text>
+      <Text Id="T_PackVVal" Alignment="Center" TypographyId="Value"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_PackALabel" Alignment="Center" TypographyId="Label"><Translation Language="GB">CURRENT</Translation></Text>
+      <Text Id="T_PackAVal" Alignment="Center" TypographyId="Value"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_MotorLabel" Alignment="Center" TypographyId="Label"><Translation Language="GB">CELL TEMP</Translation></Text>
+      <Text Id="T_MotorVal" Alignment="Right" TypographyId="Value"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_IgbtLabel" Alignment="Center" TypographyId="Label"><Translation Language="GB">INVERTER</Translation></Text>
+      <Text Id="T_IgbtVal" Alignment="Right" TypographyId="Value"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_TorqueLabel" Alignment="Center" TypographyId="Label"><Translation Language="GB">MOTOR</Translation></Text>
+      <Text Id="T_TorqueVal" Alignment="Right" TypographyId="Value"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_MotorInitial" Alignment="Center" TypographyId="Tile"><Translation Language="GB">M</Translation></Text>
+      <Text Id="T_InverterInitial" Alignment="Center" TypographyId="Tile"><Translation Language="GB">I</Translation></Text>
+      <Text Id="T_CellInitial" Alignment="Center" TypographyId="Tile"><Translation Language="GB">C</Translation></Text>
+      <Text Id="T_TempValue" Alignment="Center" TypographyId="Tile"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_MinCellLabel" Alignment="Center" TypographyId="Label"><Translation Language="GB">MIN CELL</Translation></Text>
+      <Text Id="T_MinCellValue" Alignment="Center" TypographyId="Large"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_Ain1Label" Alignment="Center" TypographyId="Label"><Translation Language="GB">AIN 1</Translation></Text>
+      <Text Id="T_Ain2Label" Alignment="Center" TypographyId="Label"><Translation Language="GB">AIN 2</Translation></Text>
+      <Text Id="T_SocLabel" Alignment="Center" TypographyId="Label"><Translation Language="GB">BATT</Translation></Text>
+      <Text Id="T_MinCellUnit" Alignment="Center" TypographyId="Label"><Translation Language="GB">V</Translation></Text>
+      <!-- 단위도 값과 같은 계열로 읽히도록 라벨(15)이 아니라 Value(30)로 둔다.
+           15 px 회색으로는 주행 중 어느 타일이 온도인지 구분이 안 된다. -->
+      <Text Id="T_DegC" Alignment="Left" TypographyId="Value"><Translation Language="GB">°C</Translation></Text>
+      <Text Id="T_Percent" Alignment="Left" TypographyId="Label"><Translation Language="GB">%</Translation></Text>
+      <Text Id="T_Volt" Alignment="Left" TypographyId="Label"><Translation Language="GB">V</Translation></Text>
+      <Text Id="T_Amp" Alignment="Left" TypographyId="Label"><Translation Language="GB">A</Translation></Text>
+      <Text Id="T_Ain1Val" Alignment="Center" TypographyId="Value"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+      <Text Id="T_Ain2Val" Alignment="Center" TypographyId="Value"><Translation Language="GB">&lt;value&gt;</Translation></Text>
+    </TextGroup>
+  </Texts>
+  <Typographies>
+    <!-- Condensed automotive typography keeps large values readable on 480x320. -->
+    <Typography Id="Rpm" Font="BarlowCondensed-SemiBold.ttf" Size="68" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789-" />
+    <Typography Id="Battery" Font="BarlowCondensed-SemiBold.ttf" Size="64" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Huge" Font="BarlowCondensed-SemiBold.ttf" Size="64" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789-" />
+    <Typography Id="Large" Font="BarlowCondensed-SemiBold.ttf" Size="52" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Tile" Font="BarlowCondensed-SemiBold.ttf" Size="40" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Default" Font="BarlowCondensed-SemiBold.ttf" Size="20" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Value" Font="BarlowCondensed-SemiBold.ttf" Size="30" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Label" Font="BarlowCondensed-Regular.ttf" Size="15" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" />
+    <Typography Id="Small" Font="BarlowCondensed-Regular.ttf" Size="11" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" />
+  </Typographies>
+</TextDatabase>

@@ -1,0 +1,105 @@
+{
+    // 빌드 방식 2가지:
+    //  1) Build (CubeIDE headless) — CubeIDE와 100% 동일한 빌드 엔진. 소스 파일 추가/삭제도 자동 반영.
+    //     Debug/ 밑의 makefile도 이 빌드가 재생성함. 단 Eclipse 기동 때문에 수십 초 걸림.
+    //  2) Build (fast, make) — 1)이 생성해 둔 Debug/makefile로 증분 빌드. 빠르지만
+    //     소스 파일을 새로 추가한 경우에는 1)을 한 번 돌려 makefile을 갱신해야 함.
+    // 주의: headless 빌드는 CubeIDE GUI가 같은 워크스페이스(-data 경로)를 열고 있으면 실패함.
+    //       여기서는 전용 워크스페이스(%LOCALAPPDATA%\stm32cubeide_headless\LIGHTON_L432)를 쓰므로 무관.
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build (CubeIDE headless)",
+            "type": "process",
+            "command": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\stm32cubeidec.exe",
+            "args": [
+                "--launcher.suppressErrors",
+                "-nosplash",
+                "-application",
+                "org.eclipse.cdt.managedbuilder.core.headlessbuild",
+                "-data",
+                "${env:LOCALAPPDATA}\\stm32cubeide_headless\\LIGHTON_L432",
+                "-import",
+                "${workspaceFolder}",
+                "-build",
+                "stm32l432kc/Debug"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": {
+                "base": "$gcc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}\\Debug"
+                ]
+            }
+        },
+        {
+            "label": "Build (fast, make)",
+            "type": "process",
+            "command": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.make.win32_2.2.0.202409170845\\tools\\bin\\make.exe",
+            "args": [
+                "-j8",
+                "-C",
+                "Debug",
+                "all"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344\\tools\\bin;C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.make.win32_2.2.0.202409170845\\tools\\bin;${env:PATH}"
+                }
+            },
+            "group": "build",
+            "problemMatcher": {
+                "base": "$gcc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}\\Debug"
+                ]
+            }
+        },
+        {
+            "label": "Clean Build (CubeIDE headless)",
+            "type": "process",
+            "command": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\stm32cubeidec.exe",
+            "args": [
+                "--launcher.suppressErrors",
+                "-nosplash",
+                "-application",
+                "org.eclipse.cdt.managedbuilder.core.headlessbuild",
+                "-data",
+                "${env:LOCALAPPDATA}\\stm32cubeide_headless\\LIGHTON_L432",
+                "-import",
+                "${workspaceFolder}",
+                "-cleanBuild",
+                "stm32l432kc/Debug"
+            ],
+            "group": "build",
+            "problemMatcher": {
+                "base": "$gcc",
+                "fileLocation": [
+                    "relative",
+                    "${workspaceFolder}\\Debug"
+                ]
+            }
+        },
+        {
+            "label": "Flash (ST-LINK)",
+            "type": "process",
+            "command": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.200.202503041107\\tools\\bin\\STM32_Programmer_CLI.exe",
+            "args": [
+                "-c",
+                "port=SWD",
+                "freq=4000",
+                "-w",
+                "Debug\\stm32l432kc.elf",
+                "-v",
+                "--start"
+            ],
+            "dependsOn": "Build (fast, make)",
+            "problemMatcher": []
+        }
+    ]
+}
