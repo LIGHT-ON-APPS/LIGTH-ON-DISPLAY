@@ -60,7 +60,7 @@
  *       확인할 때 쓴다. 이때는 display_link 없이도 화면이 돈다.
  */
 #ifndef HW_USE_TOUCHGFX_DEMO
-#define      HW_USE_TOUCHGFX_DEMO    1
+#define      HW_USE_TOUCHGFX_DEMO    0
 #endif
 
 #endif /* SRC_HW_HW_DEF_H_ */
