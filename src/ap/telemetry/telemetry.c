@@ -41,6 +41,7 @@
 #define TELEMETRY_BAMOCAR_REG_N_ACTUAL        0x30U
 #define TELEMETRY_BAMOCAR_REG_N_ACTUAL_FILT   0xA8U
 #define TELEMETRY_BAMOCAR_REG_NMAX            0xCEU
+#define TELEMETRY_BAMOCAR_REG_TORQUE_OUT      0xA0U
 #define TELEMETRY_BAMOCAR_REG_MOTOR_TEMP      0x49U
 
 /*
@@ -487,6 +488,15 @@ static bool telemetryDecodeBamocar(const can_msg_t *p_msg)
       updated = true;
       break;
 
+    case TELEMETRY_BAMOCAR_REG_TORQUE_OUT:
+      /* 실토크. 32767 이 무엇에 대응하는지(장치 전류 기준)를 아직 확인하지
+       * 못해 환산하지 않고 원시값으로 둔다. 계기판에는 쓰지 않는다. */
+      raw16 = telemetryReadU16Le(&p_msg->data[1]);
+      telemetry.signal.bamocar_torque_raw = (int32_t)(int16_t)raw16;
+      telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BAMOCAR_TORQUE_RAW;
+      updated = true;
+      break;
+
     case TELEMETRY_BAMOCAR_REG_NMAX:
       /* 부호 없는 16bit(regid.txt). 한 번만 와도 그 뒤 환산이 계속 맞는다. */
       telemetry.signal.bamocar_nmax_rpm = telemetryReadU16Le(&p_msg->data[1]);
@@ -776,6 +786,7 @@ static void cliTelemetry(cli_args_t *args)
               (unsigned int)(signal.bms_min_cell_mv / 1000U),
               (unsigned int)(signal.bms_min_cell_mv % 1000U));
     cliPrintf("bam rpm    : %ld rpm\n", (long)signal.bamocar_rpm);
+    cliPrintf("bam torque : %ld raw\n", (long)signal.bamocar_torque_raw);
     cliPrintf("bam n filt : %ld rpm\n",
               (long)signal.bamocar_speed_filt_rpm);
     cliPrintf("bam nmax   : %u rpm%s\n",

@@ -25,6 +25,7 @@ extern "C" {
 #define TELEMETRY_SIGNAL_BAMOCAR_IGBT_TEMP_DECIC  (1UL << 9)
 #define TELEMETRY_SIGNAL_BAMOCAR_STATUS           (1UL << 10)
 #define TELEMETRY_SIGNAL_BAMOCAR_ERROR_WARNING    (1UL << 11)
+#define TELEMETRY_SIGNAL_BAMOCAR_TORQUE_RAW       (1UL << 12)
 #define TELEMETRY_SIGNAL_BMS_MIN_CELL_MV           (1UL << 16)
 
 typedef struct
@@ -47,6 +48,9 @@ typedef struct
   /* 0xCE(REGID_SPEED_RPMMAX_INT). 회전수 정규화의 분모다. 아직 못 받았으면
    * 0 이고, 그때는 기본값으로 환산한다. */
   uint16_t bamocar_nmax_rpm;
+  /* 0xA0(REGID_TORQUE_OUT). 눈금이 확인되지 않아 원시값 그대로 둔다 —
+   * 계기판에는 띄우지 않고 CLI 진단에만 쓴다. */
+  int32_t  bamocar_torque_raw;
   int32_t  bamocar_dc_bus_mv;
   int16_t  bamocar_motor_temp_decic;
   int16_t  bamocar_igbt_temp_decic;
