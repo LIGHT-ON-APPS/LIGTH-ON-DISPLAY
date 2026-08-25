@@ -19,7 +19,7 @@ extern "C" {
 #define TELEMETRY_SIGNAL_BMS_MAX_TEMP_DECIC       (1UL << 3)
 #define TELEMETRY_SIGNAL_BMS_STATUS               (1UL << 4)
 #define TELEMETRY_SIGNAL_BAMOCAR_RPM              (1UL << 5)
-#define TELEMETRY_SIGNAL_BAMOCAR_TORQUE_RAW       (1UL << 6)
+#define TELEMETRY_SIGNAL_BAMOCAR_SPEED_FILT_RPM   (1UL << 6)
 #define TELEMETRY_SIGNAL_BAMOCAR_DC_BUS_MV        (1UL << 7)
 #define TELEMETRY_SIGNAL_BAMOCAR_MOTOR_TEMP_DECIC (1UL << 8)
 #define TELEMETRY_SIGNAL_BAMOCAR_IGBT_TEMP_DECIC  (1UL << 9)
@@ -41,7 +41,12 @@ typedef struct
   uint32_t bms_status;
 
   int32_t  bamocar_rpm;
-  int32_t  bamocar_torque_raw;
+  /* 0xA8(REGID_SPEED_ACTUAL_FILT). 0x30 과 같은 회전수인데 드라이브가
+   * 필터를 먹인 값이라 덜 떤다. 눈금은 0x30 과 동일하다. */
+  int32_t  bamocar_speed_filt_rpm;
+  /* 0xCE(REGID_SPEED_RPMMAX_INT). 회전수 정규화의 분모다. 아직 못 받았으면
+   * 0 이고, 그때는 기본값으로 환산한다. */
+  uint16_t bamocar_nmax_rpm;
   int32_t  bamocar_dc_bus_mv;
   int16_t  bamocar_motor_temp_decic;
   int16_t  bamocar_igbt_temp_decic;

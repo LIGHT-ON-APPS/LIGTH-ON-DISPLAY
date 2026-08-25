@@ -32,13 +32,31 @@
 #define TELEMETRY_BAMOCAR_DC_BUS_NUM_PER_10V  315L
 
 /*
- * Verify these register IDs and scales against the actual NDrive setup.
- * Speed, torque and motor-temperature scaling are installation-dependent.
+ * 레지스터 번호와 이름은 NDrive 설치본의 settings/regid.txt 를 정본으로 삼는다.
+ *
+ * 0xA8 을 '실토크' 로 알고 쓰던 것을 바로잡았다. regid.txt 상 0xA8 은
+ * REGID_SPEED_ACTUAL_FILT, 즉 드라이브가 필터를 먹인 실회전수다. 실토크는
+ * 0xA0(REGID_TORQUE_OUT) 이고 아무도 요청하지 않으므로 지금은 받지 않는다.
  */
 #define TELEMETRY_BAMOCAR_REG_N_ACTUAL        0x30U
-#define TELEMETRY_BAMOCAR_REG_TORQUE_ACTUAL   0xA8U
+#define TELEMETRY_BAMOCAR_REG_N_ACTUAL_FILT   0xA8U
+#define TELEMETRY_BAMOCAR_REG_NMAX            0xCEU
 #define TELEMETRY_BAMOCAR_REG_MOTOR_TEMP      0x49U
-#define TELEMETRY_BAMOCAR_N_MAX_RPM           6500L
+
+/*
+ * 회전수 풀스케일.
+ *
+ * 0x30/0xA8 은 ±32767 로 정규화돼 오고, 그 32767 에 대응하는 값은 모터
+ * 사양이 아니라 드라이브에 설정된 NMAX 다 — NDrive 의 settings/units.txt 가
+ * "speedRPMmax updates from 0xCE" 라고 못박고 있다. 그래서 0xCE 를 받으면
+ * 그 값을 쓰고, 못 받았을 때만 아래 기본값으로 환산한다.
+ *
+ * 기본값 6500 은 EMRAX 228 의 limiting speed(데이터시트 v1.6)다. 드라이브의
+ * NMAX 가 이와 다르게 잡혀 있으면 0xCE 가 오기 전까지 표시 회전수는 그 비율
+ * 만큼 어긋난다. 0xCE 는 아무도 요청하지 않으므로, 정확히 하려면 APPS 의
+ * 요청 목록에 0xCE 를 한 줄 넣으면 된다(한 번만 와도 그 뒤로 계속 맞는다).
+ */
+#define TELEMETRY_BAMOCAR_N_MAX_RPM_DEFAULT   6500L
 
 /*
  * Orion BMS 2 CAN frames are user-configured. This decoder expects:
@@ -111,6 +129,8 @@ typedef struct
 
 static telemetry_t telemetry;
 
+#define TELEMETRY_ARRAY_COUNT(a)              (sizeof(a) / sizeof((a)[0]))
+
 static const telemetry_temp_point_t bamocar_igbt_temp_table[] =
 {
   {16308U, -300}, {16387U, -250}, {16487U, -200}, {16609U, -150},
@@ -121,6 +141,34 @@ static const telemetry_temp_point_t bamocar_igbt_temp_table[] =
   {23671U,  700}, {24232U,  750}, {24775U,  800}, {25296U,  850},
   {25792U,  900}, {26261U,  950}, {26702U, 1000}, {27114U, 1050},
   {27497U, 1100}, {27851U, 1150}, {28179U, 1200}, {28480U, 1250},
+};
+
+/*
+ * 모터 온도 대조표 (KTY81/210).
+ *
+ * EMRAX 228 의 고정자 권선 센서는 KTY 81/210 이고(228 데이터시트 v1.6,
+ * "Temperature sensor on the stator windings"), Bamocar 는 0x49 에 그 입력의
+ * 원시 Num 을 실어 보낸다. 아래 값은 UniTek 이 NDrive 와 함께 배포하는
+ * "BAMOCAR - Temperature and VdcBus Tables" 4/4 쪽의 KTY81-2xx 열을 그대로
+ * 옮긴 것이다. 같은 표의 Tigbt NTC-infin 열이 위 IGBT 표와 한 값도 틀리지 않고
+ * 맞으므로, 두 표는 같은 출처의 같은 눈금이다.
+ *
+ * 위로 갈수록 5 도당 Num 간격이 좁아진다(25 도 부근 285, 150 도 부근 68).
+ * 센서 자체의 특성이라 여기서 할 수 있는 일은 없고, 고온에서 표시가 한두 도씩
+ * 튀는 것은 정상이다.
+ */
+static const telemetry_temp_point_t bamocar_motor_temp_table[] =
+{
+  { 7414U,  -350}, { 7687U,  -300}, { 7962U,  -250}, { 8240U,  -200},
+  { 8520U,  -150}, { 8802U,  -100}, { 9085U,   -50}, { 9369U,     0},
+  { 9654U,    50}, { 9939U,   100}, {10225U,   150}, {10510U,   200},
+  {10795U,   250}, {11080U,   300}, {11364U,   350}, {11646U,   400},
+  {11927U,   450}, {12207U,   500}, {12485U,   550}, {12762U,   600},
+  {13036U,   650}, {13308U,   700}, {13578U,   750}, {13846U,   800},
+  {14111U,   850}, {14373U,   900}, {14633U,   950}, {14890U,  1000},
+  {15144U,  1050}, {15391U,  1100}, {15628U,  1150}, {15852U,  1200},
+  {16061U,  1250}, {16251U,  1300}, {16421U,  1350}, {16569U,  1400},
+  {16692U,  1450}, {16789U,  1500}, {16857U,  1550},
 };
 
 #ifdef _USE_HW_CLI
@@ -171,28 +219,28 @@ static uint16_t telemetryReadU16Be(const uint8_t *p_data)
   return ((uint16_t)p_data[0] << 8) | (uint16_t)p_data[1];
 }
 
-static int16_t telemetryBamocarTempRawToDeciC(uint16_t raw)
+static int16_t telemetryTempRawToDeciC(uint16_t raw,
+                                       const telemetry_temp_point_t *p_table,
+                                       uint32_t count)
 {
-  const uint32_t count =
-      sizeof(bamocar_igbt_temp_table) / sizeof(bamocar_igbt_temp_table[0]);
 
-  if (raw <= bamocar_igbt_temp_table[0].raw)
+  if (raw <= p_table[0].raw)
   {
-    return bamocar_igbt_temp_table[0].temp_decic;
+    return p_table[0].temp_decic;
   }
-  if (raw >= bamocar_igbt_temp_table[count - 1U].raw)
+  if (raw >= p_table[count - 1U].raw)
   {
-    return bamocar_igbt_temp_table[count - 1U].temp_decic;
+    return p_table[count - 1U].temp_decic;
   }
 
   for (uint32_t i = 1U; i < count; i++)
   {
-    if (raw <= bamocar_igbt_temp_table[i].raw)
+    if (raw <= p_table[i].raw)
     {
-      int32_t raw0 = bamocar_igbt_temp_table[i - 1U].raw;
-      int32_t raw1 = bamocar_igbt_temp_table[i].raw;
-      int32_t temp0 = bamocar_igbt_temp_table[i - 1U].temp_decic;
-      int32_t temp1 = bamocar_igbt_temp_table[i].temp_decic;
+      int32_t raw0 = p_table[i - 1U].raw;
+      int32_t raw1 = p_table[i].raw;
+      int32_t temp0 = p_table[i - 1U].temp_decic;
+      int32_t temp1 = p_table[i].temp_decic;
 
       return (int16_t)(temp0 +
           (((int32_t)raw - raw0) * (temp1 - temp0)) / (raw1 - raw0));
@@ -200,6 +248,16 @@ static int16_t telemetryBamocarTempRawToDeciC(uint16_t raw)
   }
 
   return 0;
+}
+
+/* 정규화된 회전수(±32767)를 rpm 으로. 분모는 0xCE 를 받았으면 그 값이다. */
+static int32_t telemetryBamocarSpeedToRpm(uint16_t raw)
+{
+  int32_t nmax = (telemetry.signal.bamocar_nmax_rpm != 0U)
+                     ? (int32_t)telemetry.signal.bamocar_nmax_rpm
+                     : TELEMETRY_BAMOCAR_N_MAX_RPM_DEFAULT;
+
+  return ((int32_t)(int16_t)raw * nmax) / 32767L;
 }
 
 static bool telemetryDecodeOrion(const can_msg_t *p_msg)
@@ -415,7 +473,8 @@ static bool telemetryDecodeBamocar(const can_msg_t *p_msg)
     case TELEMETRY_BAMOCAR_REG_IGBT_TEMP:
       raw16 = telemetryReadU16Le(&p_msg->data[1]);
       telemetry.signal.bamocar_igbt_temp_decic =
-          telemetryBamocarTempRawToDeciC(raw16);
+          telemetryTempRawToDeciC(raw16, bamocar_igbt_temp_table,
+                                  TELEMETRY_ARRAY_COUNT(bamocar_igbt_temp_table));
       telemetry.signal.valid_mask |=
           TELEMETRY_SIGNAL_BAMOCAR_IGBT_TEMP_DECIC;
       updated = true;
@@ -423,26 +482,35 @@ static bool telemetryDecodeBamocar(const can_msg_t *p_msg)
 
     case TELEMETRY_BAMOCAR_REG_N_ACTUAL:
       raw16 = telemetryReadU16Le(&p_msg->data[1]);
-      telemetry.signal.bamocar_rpm =
-          ((int32_t)(int16_t)raw16 * TELEMETRY_BAMOCAR_N_MAX_RPM) / 32767L;
+      telemetry.signal.bamocar_rpm = telemetryBamocarSpeedToRpm(raw16);
       telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BAMOCAR_RPM;
       updated = true;
       break;
 
-    case TELEMETRY_BAMOCAR_REG_TORQUE_ACTUAL:
+    case TELEMETRY_BAMOCAR_REG_NMAX:
+      /* 부호 없는 16bit(regid.txt). 한 번만 와도 그 뒤 환산이 계속 맞는다. */
+      telemetry.signal.bamocar_nmax_rpm = telemetryReadU16Le(&p_msg->data[1]);
+      updated = true;
+      break;
+
+    case TELEMETRY_BAMOCAR_REG_N_ACTUAL_FILT:
       raw16 = telemetryReadU16Le(&p_msg->data[1]);
-      telemetry.signal.bamocar_torque_raw = (int32_t)(int16_t)raw16;
-      telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BAMOCAR_TORQUE_RAW;
+      telemetry.signal.bamocar_speed_filt_rpm =
+          telemetryBamocarSpeedToRpm(raw16);
+      telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BAMOCAR_SPEED_FILT_RPM;
       updated = true;
       break;
 
     case TELEMETRY_BAMOCAR_REG_MOTOR_TEMP:
       raw16 = telemetryReadU16Le(&p_msg->data[1]);
       /*
-       * The motor uses a KTY81/210 sensor, not the IGBT NTC. Keep the raw Num
-       * until the NDrive motor-temperature conversion is confirmed.
+       * 모터는 IGBT 의 NTC 가 아니라 KTY81/210 이라 표가 다르다.
+       * regid.txt 상 0x49(REGID_T_MOTOR)는 부호 없는 16bit 이므로
+       * int16 으로 접지 않는다 — 접으면 32767 을 넘는 Num 이 음수가 된다.
        */
-      telemetry.signal.bamocar_motor_temp_decic = (int16_t)raw16;
+      telemetry.signal.bamocar_motor_temp_decic =
+          telemetryTempRawToDeciC(raw16, bamocar_motor_temp_table,
+                                  TELEMETRY_ARRAY_COUNT(bamocar_motor_temp_table));
       telemetry.signal.valid_mask |=
           TELEMETRY_SIGNAL_BAMOCAR_MOTOR_TEMP_DECIC;
       updated = true;
@@ -708,7 +776,11 @@ static void cliTelemetry(cli_args_t *args)
               (unsigned int)(signal.bms_min_cell_mv / 1000U),
               (unsigned int)(signal.bms_min_cell_mv % 1000U));
     cliPrintf("bam rpm    : %ld rpm\n", (long)signal.bamocar_rpm);
-    cliPrintf("bam torque : %ld raw\n", (long)signal.bamocar_torque_raw);
+    cliPrintf("bam n filt : %ld rpm\n",
+              (long)signal.bamocar_speed_filt_rpm);
+    cliPrintf("bam nmax   : %u rpm%s\n",
+              (unsigned int)signal.bamocar_nmax_rpm,
+              (signal.bamocar_nmax_rpm != 0U) ? "" : " (미수신, 기본 6500 적용)");
     cliPrintf("bam dc bus : %ld mV\n", (long)signal.bamocar_dc_bus_mv);
     cliPrintf("bam m temp : %d.%d C\n",
               (int)(signal.bamocar_motor_temp_decic / 10),
