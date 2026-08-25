@@ -26,15 +26,15 @@ struct Typography
 
 struct TypographyFontIndex
 {
-    static const touchgfx::FontId RPM = 0;     // BarlowCondensed_SemiBold_68_4bpp
-    static const touchgfx::FontId BATTERY = 1; // BarlowCondensed_SemiBold_64_4bpp
-    static const touchgfx::FontId HUGE = 1;    // BarlowCondensed_SemiBold_64_4bpp
-    static const touchgfx::FontId LARGE = 2;   // BarlowCondensed_SemiBold_52_4bpp
-    static const touchgfx::FontId TILE = 3;    // BarlowCondensed_SemiBold_40_4bpp
-    static const touchgfx::FontId DEFAULT = 4; // BarlowCondensed_SemiBold_20_4bpp
-    static const touchgfx::FontId VALUE = 5;   // BarlowCondensed_SemiBold_30_4bpp
-    static const touchgfx::FontId LABEL = 6;   // BarlowCondensed_Regular_15_4bpp
-    static const touchgfx::FontId SMALL = 7;   // BarlowCondensed_Regular_11_4bpp
+    static const touchgfx::FontId RPM = 0;     // SairaCondensed_Bold_68_4bpp
+    static const touchgfx::FontId BATTERY = 1; // SairaCondensed_Bold_52_4bpp
+    static const touchgfx::FontId HUGE = 2;    // SairaCondensed_Bold_64_4bpp
+    static const touchgfx::FontId LARGE = 1;   // SairaCondensed_Bold_52_4bpp
+    static const touchgfx::FontId TILE = 3;    // SairaCondensed_Bold_40_4bpp
+    static const touchgfx::FontId DEFAULT = 4; // SairaCondensed_Bold_20_4bpp
+    static const touchgfx::FontId VALUE = 5;   // SairaCondensed_Bold_30_4bpp
+    static const touchgfx::FontId LABEL = 6;   // SairaCondensed_Regular_15_4bpp
+    static const touchgfx::FontId SMALL = 7;   // SairaCondensed_Regular_11_4bpp
     static const uint16_t NUMBER_OF_FONTS = 8;
 };
 

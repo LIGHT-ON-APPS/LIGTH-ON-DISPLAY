@@ -224,7 +224,24 @@ void SystemClock_Config(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+  /*
+   * 여기서 멈춘다.
+   *
+   * 예전에는 본문이 비어 있어 그냥 리턴했다. SystemClock_Config() 에서 LSE 를
+   * 못 잡아 HAL_RCC_OscConfig() 가 타임아웃으로 실패해도 그대로 지나가고,
+   * PLL 이 안 켜진 채 HAL_RCC_ClockConfig(PLLCLK) 까지 실패한 뒤 SYSCLK 가
+   * MSI 4 MHz 로 남은 상태로 부팅이 이어졌다. 그 상태에서 CAN 은 500 kbps 가
+   * 아니라 25 kbps 로 돌아 한 프레임도 못 받는다. 화면은 느릴 뿐 그럭저럭
+   * 그려지므로, 눈으로는 클럭이 틀어진 줄 알 수가 없다.
+   *
+   * 절름발이로 조용히 도는 것보다 여기서 멈추는 편이 낫다. 디버거를 붙이면
+   * 콜스택에 원인이 그대로 남고, 못 붙이는 상황이면 "화면이 아예 안 뜬다" 는
+   * 증상으로 드러난다.
+   */
+  __disable_irq();
 
+  while (1)
+  {
+  }
   /* USER CODE END Error_Handler_Debug */
 }

@@ -42,15 +42,18 @@
     </TextGroup>
   </Texts>
   <Typographies>
-    <!-- Condensed automotive typography keeps large values readable on 480x320. -->
-    <Typography Id="Rpm" Font="BarlowCondensed-SemiBold.ttf" Size="68" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789-" />
-    <Typography Id="Battery" Font="BarlowCondensed-SemiBold.ttf" Size="64" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
-    <Typography Id="Huge" Font="BarlowCondensed-SemiBold.ttf" Size="64" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789-" />
-    <Typography Id="Large" Font="BarlowCondensed-SemiBold.ttf" Size="52" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
-    <Typography Id="Tile" Font="BarlowCondensed-SemiBold.ttf" Size="40" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
-    <Typography Id="Default" Font="BarlowCondensed-SemiBold.ttf" Size="20" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
-    <Typography Id="Value" Font="BarlowCondensed-SemiBold.ttf" Size="30" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
-    <Typography Id="Label" Font="BarlowCondensed-Regular.ttf" Size="15" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" />
-    <Typography Id="Small" Font="BarlowCondensed-Regular.ttf" Size="11" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" />
+    <!-- Condensed automotive typography keeps large values readable on 480x320.
+         크기는 위계 순서다: RPM(68) > 배터리 잔량 = 최저셀(52) > 온도(40) >
+         상태(20) > 라벨(15) > 보조(11). 잔량이 68 에 가까우면 화면에서 RPM 과
+         같은 무게로 읽혀 무엇을 먼저 봐야 할지가 흐려진다. -->
+    <Typography Id="Rpm" Font="SairaCondensed-Bold.ttf" Size="68" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789-" />
+    <Typography Id="Battery" Font="SairaCondensed-Bold.ttf" Size="52" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Huge" Font="SairaCondensed-Bold.ttf" Size="64" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789-" />
+    <Typography Id="Large" Font="SairaCondensed-Bold.ttf" Size="52" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Tile" Font="SairaCondensed-Bold.ttf" Size="40" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Default" Font="SairaCondensed-Bold.ttf" Size="20" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Value" Font="SairaCondensed-Bold.ttf" Size="30" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" WildcardCharacters="0123456789.%-" />
+    <Typography Id="Label" Font="SairaCondensed-Regular.ttf" Size="15" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" />
+    <Typography Id="Small" Font="SairaCondensed-Regular.ttf" Size="11" Bpp="4" IsVector="no" Direction="LTR" FallbackCharacter="?" />
   </Typographies>
 </TextDatabase>

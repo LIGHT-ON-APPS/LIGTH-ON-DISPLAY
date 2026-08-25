@@ -48,6 +48,16 @@ void apMain(void)
 {
   while (1)
   {
+    /*
+     * CAN 에러 상태를 살피고 필요하면 회복을 건다.
+     *
+     * bus-off 자체는 canOpen() 이 AutoBusOff 를 켜 두었으므로 하드웨어가
+     * 풀지만, error-passive 로 주저앉은 채 버티는 경우는 여기서
+     * canRecovery() 를 걸어 줘야 정상 수신으로 돌아온다. 이 호출이 빠져
+     * 있던 동안에는 회복 로직이 코드에만 있고 아무도 돌리지 않았다.
+     */
+    (void)canUpdate();
+
     displayLinkUpdate();
 
 #ifdef _USE_HW_TOUCHGFX

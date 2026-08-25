@@ -5,24 +5,24 @@
 #include <fonts/UnmappedDataFont.hpp>
 #include <texts/TypedTextDatabase.hpp>
 
-extern touchgfx::UnmappedDataFont& getFont_BarlowCondensed_SemiBold_68_4bpp();
-extern touchgfx::UnmappedDataFont& getFont_BarlowCondensed_SemiBold_64_4bpp();
-extern touchgfx::UnmappedDataFont& getFont_BarlowCondensed_SemiBold_52_4bpp();
-extern touchgfx::UnmappedDataFont& getFont_BarlowCondensed_SemiBold_40_4bpp();
-extern touchgfx::UnmappedDataFont& getFont_BarlowCondensed_SemiBold_20_4bpp();
-extern touchgfx::UnmappedDataFont& getFont_BarlowCondensed_SemiBold_30_4bpp();
-extern touchgfx::UnmappedDataFont& getFont_BarlowCondensed_Regular_15_4bpp();
-extern touchgfx::UnmappedDataFont& getFont_BarlowCondensed_Regular_11_4bpp();
+extern touchgfx::UnmappedDataFont& getFont_SairaCondensed_Bold_68_4bpp();
+extern touchgfx::UnmappedDataFont& getFont_SairaCondensed_Bold_52_4bpp();
+extern touchgfx::UnmappedDataFont& getFont_SairaCondensed_Bold_64_4bpp();
+extern touchgfx::UnmappedDataFont& getFont_SairaCondensed_Bold_40_4bpp();
+extern touchgfx::UnmappedDataFont& getFont_SairaCondensed_Bold_20_4bpp();
+extern touchgfx::UnmappedDataFont& getFont_SairaCondensed_Bold_30_4bpp();
+extern touchgfx::UnmappedDataFont& getFont_SairaCondensed_Regular_15_4bpp();
+extern touchgfx::UnmappedDataFont& getFont_SairaCondensed_Regular_11_4bpp();
 
 const touchgfx::Font* touchgfx_fonts[] = {
-    &(getFont_BarlowCondensed_SemiBold_68_4bpp()),
-    &(getFont_BarlowCondensed_SemiBold_64_4bpp()),
-    &(getFont_BarlowCondensed_SemiBold_52_4bpp()),
-    &(getFont_BarlowCondensed_SemiBold_40_4bpp()),
-    &(getFont_BarlowCondensed_SemiBold_20_4bpp()),
-    &(getFont_BarlowCondensed_SemiBold_30_4bpp()),
-    &(getFont_BarlowCondensed_Regular_15_4bpp()),
-    &(getFont_BarlowCondensed_Regular_11_4bpp())
+    &(getFont_SairaCondensed_Bold_68_4bpp()),
+    &(getFont_SairaCondensed_Bold_52_4bpp()),
+    &(getFont_SairaCondensed_Bold_64_4bpp()),
+    &(getFont_SairaCondensed_Bold_40_4bpp()),
+    &(getFont_SairaCondensed_Bold_20_4bpp()),
+    &(getFont_SairaCondensed_Bold_30_4bpp()),
+    &(getFont_SairaCondensed_Regular_15_4bpp()),
+    &(getFont_SairaCondensed_Regular_11_4bpp())
 };
 
 extern const touchgfx::TypedText::TypedTextData typedText_database_DEFAULT[];
@@ -51,7 +51,7 @@ const touchgfx::TypedText::TypedTextData typedText_database_DEFAULT[] TEXT_LOCAT
     { 3, touchgfx::CENTER, touchgfx::TEXT_DIRECTION_LTR },
     { 3, touchgfx::CENTER, touchgfx::TEXT_DIRECTION_LTR },
     { 6, touchgfx::CENTER, touchgfx::TEXT_DIRECTION_LTR },
-    { 2, touchgfx::CENTER, touchgfx::TEXT_DIRECTION_LTR },
+    { 1, touchgfx::CENTER, touchgfx::TEXT_DIRECTION_LTR },
     { 6, touchgfx::CENTER, touchgfx::TEXT_DIRECTION_LTR },
     { 6, touchgfx::CENTER, touchgfx::TEXT_DIRECTION_LTR },
     { 6, touchgfx::CENTER, touchgfx::TEXT_DIRECTION_LTR },
@@ -97,28 +97,28 @@ void resetFont(touchgfx::FontId fontId)
     switch (fontId)
     {
     case 0:
-        touchgfx_fonts[0] = &(getFont_BarlowCondensed_SemiBold_68_4bpp());
+        touchgfx_fonts[0] = &(getFont_SairaCondensed_Bold_68_4bpp());
         break;
     case 1:
-        touchgfx_fonts[1] = &(getFont_BarlowCondensed_SemiBold_64_4bpp());
+        touchgfx_fonts[1] = &(getFont_SairaCondensed_Bold_52_4bpp());
         break;
     case 2:
-        touchgfx_fonts[2] = &(getFont_BarlowCondensed_SemiBold_52_4bpp());
+        touchgfx_fonts[2] = &(getFont_SairaCondensed_Bold_64_4bpp());
         break;
     case 3:
-        touchgfx_fonts[3] = &(getFont_BarlowCondensed_SemiBold_40_4bpp());
+        touchgfx_fonts[3] = &(getFont_SairaCondensed_Bold_40_4bpp());
         break;
     case 4:
-        touchgfx_fonts[4] = &(getFont_BarlowCondensed_SemiBold_20_4bpp());
+        touchgfx_fonts[4] = &(getFont_SairaCondensed_Bold_20_4bpp());
         break;
     case 5:
-        touchgfx_fonts[5] = &(getFont_BarlowCondensed_SemiBold_30_4bpp());
+        touchgfx_fonts[5] = &(getFont_SairaCondensed_Bold_30_4bpp());
         break;
     case 6:
-        touchgfx_fonts[6] = &(getFont_BarlowCondensed_Regular_15_4bpp());
+        touchgfx_fonts[6] = &(getFont_SairaCondensed_Regular_15_4bpp());
         break;
     case 7:
-        touchgfx_fonts[7] = &(getFont_BarlowCondensed_Regular_11_4bpp());
+        touchgfx_fonts[7] = &(getFont_SairaCondensed_Regular_11_4bpp());
         break;
     }
 }

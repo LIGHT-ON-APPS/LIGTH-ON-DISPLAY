@@ -93,6 +93,10 @@ static void displayLinkMapStatus(const telemetry_signal_snapshot_t *p_signal)
 
 bool displayLinkInit(void)
 {
+#ifdef _USE_HW_CLI
+  static bool cli_registered = false;
+#endif
+
   memset(&display_link, 0, sizeof(display_link));
 
   (void)telemetryInit();
@@ -107,11 +111,21 @@ bool displayLinkInit(void)
                   DISPLAY_LINK_CAN_BAUD);
   }
 
+  /*
+   * 수신 필터는 반드시 채널을 연 뒤에 좁힌다. canOpen() 이 뱅크 0~1 에 전체
+   * 통과 필터를 깔고 나오므로 순서를 뒤집으면 이 설정이 도로 덮인다.
+   */
+  (void)telemetryConfigCanFilter(DISPLAY_LINK_CAN_CH);
+
   display_link.last_rx_frame_count = canGetRxCount(DISPLAY_LINK_CAN_CH);
   display_link.initialized = true;
 
 #ifdef _USE_HW_CLI
-  (void)cliAdd("display", displayLinkCli);
+  /* 재초기화 때마다 등록하면 명령 목록(16 칸)이 같은 이름으로 찬다. */
+  if (cli_registered != true)
+  {
+    cli_registered = cliAdd("display", displayLinkCli);
+  }
 #endif
 
   return true;

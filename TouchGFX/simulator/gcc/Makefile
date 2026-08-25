@@ -26,8 +26,9 @@ ADDITIONAL_SOURCES :=
 # and third-party headers.
 touchgfx_install := C:\\TouchGFX\\4.26.1\\touchgfx
 # Model.cpp 가 시뮬레이터 빌드에서도 표시 프로토콜의 valid mask 비트를 쓴다.
-# 타깃 빌드는 CubeIDE 프로젝트 설정에 이 경로가 이미 들어 있다.
-ADDITIONAL_INCLUDE_PATHS := ../../shared \
+# display_protocol.h 는 이 보드에서 src/ap 로 옮겨졌다(F411 시절에는 저장소
+# 최상위 shared/ 였다). 타깃 빌드는 CubeIDE 프로젝트 설정에 이 경로가 있다.
+ADDITIONAL_INCLUDE_PATHS := ../src/ap \
                             $(touchgfx_install)/3rdparty/libjpeg/include
 # 이 저장소의 Middlewares 에는 타깃용 cortex_m4f 라이브러리만 들어 있다.
 # 시뮬레이터가 쓰는 mingw32/SDL2/libjpeg 는 TouchGFX 설치본에서 가져온다.

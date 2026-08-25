@@ -12,31 +12,31 @@ touchgfx::Font* ApplicationFontProvider::getFont(touchgfx::FontId typography)
     switch (typography)
     {
     case Typography::RPM:
-        // BarlowCondensed_SemiBold_68_4bpp
+        // SairaCondensed_Bold_68_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[0]);
     case Typography::BATTERY:
-        // BarlowCondensed_SemiBold_64_4bpp
+        // SairaCondensed_Bold_52_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[1]);
     case Typography::HUGE:
-        // BarlowCondensed_SemiBold_64_4bpp
-        return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[1]);
-    case Typography::LARGE:
-        // BarlowCondensed_SemiBold_52_4bpp
+        // SairaCondensed_Bold_64_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[2]);
+    case Typography::LARGE:
+        // SairaCondensed_Bold_52_4bpp
+        return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[1]);
     case Typography::TILE:
-        // BarlowCondensed_SemiBold_40_4bpp
+        // SairaCondensed_Bold_40_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[3]);
     case Typography::DEFAULT:
-        // BarlowCondensed_SemiBold_20_4bpp
+        // SairaCondensed_Bold_20_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[4]);
     case Typography::VALUE:
-        // BarlowCondensed_SemiBold_30_4bpp
+        // SairaCondensed_Bold_30_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[5]);
     case Typography::LABEL:
-        // BarlowCondensed_Regular_15_4bpp
+        // SairaCondensed_Regular_15_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[6]);
     case Typography::SMALL:
-        // BarlowCondensed_Regular_11_4bpp
+        // SairaCondensed_Regular_11_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[7]);
     default:
         return 0;

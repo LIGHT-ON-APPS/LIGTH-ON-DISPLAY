@@ -6,6 +6,7 @@
 #include <touchgfx/Unicode.hpp>
 #include <touchgfx/widgets/Box.hpp>
 #include <touchgfx/widgets/BoxWithBorder.hpp>
+#include <touchgfx/widgets/Image.hpp>
 #include <touchgfx/widgets/TextArea.hpp>
 #include <touchgfx/widgets/TextAreaWithWildcard.hpp>
 #include <touchgfx/widgets/canvas/Circle.hpp>
@@ -71,6 +72,28 @@ public:
                          int16_t motorTempDecic);
 
 protected:
+    /*
+     * 둥근 모서리.
+     *
+     * Box 는 사각형만 그리므로 네 귀에 조각 그림을 얹어 모서리를 깎는다. 조각은
+     * '패널색 안쪽 / 바탕색 바깥'을 미리 합성해 둔 불투명 이미지라 런타임
+     * 블렌딩이 없다. 한 조각이 10x10, 12장 합쳐 Flash 로 3 KB 남짓이다.
+     *
+     * 순서는 tl, tr, bl, br 고정이다.
+     *
+     * 조각을 얹는 것은 온도 칸 셋뿐이다. 상단 시프트 바와 가운데 RPM 자리는
+     * 바탕과 같은 흰 면이라 눈에 보이는 모서리가 없고, 거기에 조각을 놓으면
+     * 직선 테두리 없이 네 귀에만 곡선이 남아 점선 액자처럼 보인다.
+     */
+    enum
+    {
+        PANEL_MOTOR = 0,
+        PANEL_IGBT,
+        PANEL_CELL,
+        PANEL_COUNT
+    };
+    touchgfx::Image panelCorner[PANEL_COUNT][4];
+
     touchgfx::Box screenBg;
 
     /* Shift-light housing and LEDs. */
@@ -102,7 +125,11 @@ protected:
     touchgfx::TextArea statusText;
 
     /* Bottom temperature tiles. Initials and units are static; only the large
-     * numeric widget is invalidated when telemetry changes. */
+     * numeric widget is invalidated when telemetry changes.
+     *
+     * 화면에서 테두리를 갖는 자리는 여기 셋뿐이다. 바탕과 같은 흰 면이라
+     * 선이 없으면 어디까지가 한 칸인지 보이지 않는다. 칸이 경고나 고장으로
+     * 물들면 면 자체가 경계가 되므로 선은 면 색에 묻어 사라진다. */
     touchgfx::BoxWithBorder motorPanel;
     touchgfx::TextArea motorTempLabel;
     touchgfx::TextAreaWithOneWildcard motorValue;
@@ -154,6 +181,7 @@ private:
     /* 온도 타일 하나를 갱신한다. 세 타일이 규칙이 같아서 한 곳으로 묶었다. */
     void updateTempTile(DrawnField& drawn,
                         touchgfx::BoxWithBorder& panel,
+                        touchgfx::Image* corners,
                         touchgfx::TextArea& initial,
                         touchgfx::TextAreaWithOneWildcard& value,
                         touchgfx::TextArea& unit,

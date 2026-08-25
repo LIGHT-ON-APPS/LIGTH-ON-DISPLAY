@@ -19,11 +19,40 @@
 
 #define CAN_RECOVERY_FAIL_CNT_MAX     6
 
+/* 32 비트 필터 레지스터 안의 IDE / RTR 비트 위치. canConfigFilter() 참고. */
+#define CAN_FILTER_IDE_BIT            (1UL << 2)
+#define CAN_FILTER_RTR_BIT            (1UL << 1)
+
+/*
+ * 진단용 필터 뱅크.
+ *
+ * cliCan() 의 bamocar_status 는 응답만 보려고 필터를 좁힌다. 그때 뱅크 0 을
+ * 쓰면 애플리케이션이 걸어 둔 필터(telemetryConfigCanFilter)를 덮어써서,
+ * 명령을 한 번 친 뒤로는 재부팅 전까지 BMS 프레임이 들어오지 않는다.
+ * 아무도 안 쓰는 마지막 뱅크를 쓴다.
+ */
+#define CAN_FILTER_BANK_DIAG          13
+
 #define CAN_BAMOCAR_CMD_ID            0x201
 #define CAN_BAMOCAR_RSP_ID            0x181
 #define CAN_BAMOCAR_STATUS_REQ        0x3D
 #define CAN_BAMOCAR_STATUS_REG        0x40
 #define CAN_BAMOCAR_STATUS_TIMEOUT    200
+
+/*
+ * 진단 출력 경로.
+ *
+ * 원래는 canInfoPrint() 안에서만 정의해 쓰던 매크로다. 그래서 그 앞에 있는
+ * canErrPrint() 는 logPrintf 를 쓸 수밖에 없었는데, logPrintf 의 끝은
+ * printf -> _write -> __io_putchar() 이고 그 함수는 아무 데도 내보내지 않는
+ * 빈 껍데기다(bsp.c). CAN 이 왜 안 되는지 알려 주는 err_code 와 ESR 이
+ * 통째로 버려지고 있었다. 파일 맨 위로 올려 두 함수가 같이 쓰게 한다.
+ */
+#ifdef _USE_HW_CLI
+#define canPrintf   cliPrintf
+#else
+#define canPrintf   logPrintf
+#endif
 
 
 typedef struct
@@ -194,7 +223,17 @@ bool canOpen(uint8_t ch, CanMode_t mode, CanFrame_t frame, CanBaud_t baud, CanBa
       p_can->Init.TimeSeg1             = p_baud_normal[baud].tseg1;
       p_can->Init.TimeSeg2             = p_baud_normal[baud].tseg2;
       p_can->Init.TimeTriggeredMode    = DISABLE;
-      p_can->Init.AutoBusOff           = DISABLE;
+      /*
+       * bus-off 는 하드웨어가 스스로 빠져나오게 둔다.
+       *
+       * DISABLE 이면 소프트웨어가 init 모드를 한 번 들렀다 나와야 복구가
+       * 시작된다. 그 요청을 거는 곳은 canUpdate() -> canRecovery() 뿐인데,
+       * 이 보드는 수신만 하므로 bus-off 는 소리 없이 찾아온다. 보레이트나
+       * 배선이 한 번 어긋나 에러 프레임을 뿌리다 bus-off 로 떨어지면, 그
+       * 뒤에 버스를 제대로 고쳐도 전원을 껐다 켜기 전까지 한 프레임도 못
+       * 받는다. 차량에 실리는 물건이라 그 침묵이 제일 위험하다.
+       */
+      p_can->Init.AutoBusOff           = ENABLE;
       p_can->Init.AutoWakeUp           = DISABLE;
       p_can->Init.ReceiveFifoLocked    = DISABLE;
       p_can->Init.TransmitFifoPriority = DISABLE;
@@ -237,7 +276,19 @@ bool canOpen(uint8_t ch, CanMode_t mode, CanFrame_t frame, CanBaud_t baud, CanBa
     return false;
   }
 
+  /*
+   * 연 직후에는 데이터 프레임을 하나도 거르지 않는다.
+   *
+   * 예전에는 표준 뱅크 하나만 깔았다. 그런데 canConfigFilter() 는 마스크
+   * 모드에서 IDE 비트까지 맞춰 보므로, 그 필터는 확장 프레임을 전부 막는다.
+   * 확장 ID 를 쓰는 버스에서는 'can open test' 로 열고 read_test 를 걸어도
+   * 한 줄이 안 나와서, 필터 설정 문제를 버스 고장으로 오해하게 된다.
+   * 표준(뱅크 0)과 확장(뱅크 1)을 같이 깔아 그 함정을 없앤다.
+   *
+   * 애플리케이션은 이 위에 자기 필터를 덮어쓴다(telemetryConfigCanFilter).
+   */
   canConfigFilter(ch, 0, CAN_STD, CAN_ID_MASK, 0x0000, 0x0000);
+  canConfigFilter(ch, 1, CAN_EXT, CAN_ID_MASK, 0x0000, 0x0000);
 
   if (HAL_CAN_ActivateNotification(p_can, can_tbl[ch].enable_int) != HAL_OK)
   {
@@ -347,19 +398,33 @@ bool canConfigFilter(uint8_t ch,
   sFilterConfig.SlaveStartFilterBank = 14;
 
 
+  /*
+   * 32 비트 필터 레지스터 배치는 [31:21] STID, [20:3] EXID, [2] IDE, [1] RTR 이다.
+   *
+   * IDE 와 RTR 을 마스크에 넣지 않으면 CAN_STD 로 건 필터가 확장 프레임까지
+   * 통과시킨다. EXID 상위 11 비트가 우리 표준 ID 와 겹치는 프레임이 그대로
+   * 들어온다. RTR 은 더 나쁘다. 데이터 없이 DLC 만 실려 오는데 수신 버퍼는
+   * 직전 내용이 남아 있어, 걸러내지 않으면 디코더가 그 쓰레기를 값으로 읽는다.
+   *
+   * 리스트 모드에서는 마스크 레지스터가 두 번째 ID 로 해석되므로 이 비트를
+   * 건드리면 안 된다. 마스크 모드일 때만 적용한다.
+   */
+  const uint32_t ide_rtr_mask =
+      (ft_type == CAN_ID_MASK) ? (CAN_FILTER_IDE_BIT | CAN_FILTER_RTR_BIT) : 0U;
+
   if (id_type == CAN_STD)
   {
     sFilterConfig.FilterIdHigh     = ((id << 5) & 0xFFFF);
     sFilterConfig.FilterIdLow      = 0;
     sFilterConfig.FilterMaskIdHigh = ((id_mask << 5) & 0xFFFF);
-    sFilterConfig.FilterMaskIdLow  = 0;
+    sFilterConfig.FilterMaskIdLow  = ide_rtr_mask;
   }
   else
   {
     sFilterConfig.FilterIdHigh     = ((id >> 13) & 0xFFFF);
-    sFilterConfig.FilterIdLow      = ((id << 3) & 0xFFF8);
+    sFilterConfig.FilterIdLow      = (((id << 3) & 0xFFF8) | CAN_FILTER_IDE_BIT);
     sFilterConfig.FilterMaskIdHigh = ((id_mask >> 13) & 0xFFFF);
-    sFilterConfig.FilterMaskIdLow  = ((id_mask << 3) & 0xFFF8);
+    sFilterConfig.FilterMaskIdLow  = (((id_mask << 3) & 0xFFF8) | ide_rtr_mask);
   }
 
   if (ft_type == CAN_ID_MASK)
@@ -663,14 +728,14 @@ void canErrPrint(uint8_t ch)
 
   err_code = can_tbl[ch].err_code;
 
-  if (err_code & CAN_ERR_PASSIVE)   logPrintf("  ERR : CAN_ERR_PASSIVE\n");
-  if (err_code & CAN_ERR_WARNING)   logPrintf("  ERR : CAN_ERR_WARNING\n");
-  if (err_code & CAN_ERR_BUS_OFF)   logPrintf("  ERR : CAN_ERR_BUS_OFF\n");
-  if (err_code & CAN_ERR_BUS_FAULT) logPrintf("  ERR : CAN_ERR_BUS_FAULT\n");
-  if (err_code & CAN_ERR_ETC)       logPrintf("  ERR : CAN_ERR_BUS_ETC\n");
-  if (err_code & CAN_ERR_MSG)       logPrintf("  ERR : CAN_ERR_BUS_MSG\n");
+  if (err_code & CAN_ERR_PASSIVE)   canPrintf("  ERR : CAN_ERR_PASSIVE\n");
+  if (err_code & CAN_ERR_WARNING)   canPrintf("  ERR : CAN_ERR_WARNING\n");
+  if (err_code & CAN_ERR_BUS_OFF)   canPrintf("  ERR : CAN_ERR_BUS_OFF\n");
+  if (err_code & CAN_ERR_BUS_FAULT) canPrintf("  ERR : CAN_ERR_BUS_FAULT\n");
+  if (err_code & CAN_ERR_ETC)       canPrintf("  ERR : CAN_ERR_BUS_ETC\n");
+  if (err_code & CAN_ERR_MSG)       canPrintf("  ERR : CAN_ERR_BUS_MSG\n");
 
-  logPrintf("  ESR : 0x%lX\n", can_tbl[ch].h_can->Instance->ESR );
+  canPrintf("  ESR : 0x%lX\n", (unsigned long)can_tbl[ch].h_can->Instance->ESR);
 }
 
 void canErrUpdate(uint8_t ch)
@@ -730,12 +795,6 @@ void canErrUpdate(uint8_t ch)
 void canInfoPrint(uint8_t ch)
 {
   can_tbl_t *p_can = &can_tbl[ch];
-
-  #ifdef _USE_HW_CLI
-  #define canPrintf   cliPrintf
-  #else
-  #define canPrintf   logPrintf
-  #endif
 
   canPrintf("ch            : ");
   switch(ch)
@@ -1344,7 +1403,8 @@ void cliCan(cli_args_t *args)
       }
     }
 
-    if (canConfigFilter(ch, 0, CAN_STD, CAN_ID_MASK, CAN_BAMOCAR_RSP_ID, 0x7FF) != true)
+    if (canConfigFilter(ch, CAN_FILTER_BANK_DIAG, CAN_STD, CAN_ID_MASK,
+                        CAN_BAMOCAR_RSP_ID, 0x7FF) != true)
     {
       cliPrintf("canConfigFilter() : False\n");
       canUnLock();
@@ -1419,6 +1479,42 @@ void cliCan(cli_args_t *args)
     ret = true;
   }
 
+  /*
+   * 진단용 전체통과 필터.
+   *
+   * 부팅하면 telemetryConfigCanFilter() 가 뱅크 0~2 를 디코더가 읽는 세 ID 로
+   * 좁힌다. 평소에는 그게 맞다. 그런데 값이 안 뜰 때 "버스가 죽었다" 와
+   * "차량이 쓰는 ID 가 우리가 아는 것과 다르다" 를 가르려면 버스에 실제로
+   * 무엇이 흐르는지 봐야 하는데, 좁은 필터로는 그걸 볼 방법이 없었다.
+   * 멀쩡히 살아 있는 버스도 read_test 에서 한 줄도 안 나왔다.
+   *
+   * 뱅크 0 에 표준, 뱅크 1 에 확장을 각각 전체통과로 깔아 데이터 프레임을
+   * 전부 받는다. RTR 은 그대로 막는다. 데이터 없이 DLC 만 실려 오는 프레임을
+   * 통과시키면 수신 버퍼에 남아 있던 직전 내용을 디코더가 값으로 읽는다.
+   *
+   * 되돌리는 것은 'telemetry filter' 다. 이 명령은 hw 계층이라 애플리케이션이
+   * 어떤 ID 를 보고 싶어 하는지 알지 못한다.
+   */
+  if (args->argc == 3 && args->isStr(0, "filter") && args->isStr(1, "all"))
+  {
+    uint8_t ch;
+    bool std_ok;
+    bool ext_ok;
+
+    ch = constrain(args->getData(2), 0, CAN_MAX_CH - 1);
+
+    std_ok = canConfigFilter(ch, 0, CAN_STD, CAN_ID_MASK, 0x000, 0x000);
+    ext_ok = canConfigFilter(ch, 1, CAN_EXT, CAN_ID_MASK, 0x000, 0x000);
+
+    cliPrintf("filter all : std %s, ext %s\n",
+              std_ok ? "ok" : "fail",
+              ext_ok ? "ok" : "fail");
+    cliPrintf("app filter overridden until reboot.\n");
+    cliPrintf("  'telemetry filter' to restore\n");
+    cliPrintf("  'can read_test %d' to watch the bus\n", ch);
+    ret = true;
+  }
+
   if (args->argc == 2 && args->isStr(0, "recovery"))
   {
     uint8_t ch;
@@ -1447,6 +1543,7 @@ void cliCan(cli_args_t *args)
 #endif
     cliPrintf("can bamocar_status\n");
     cliPrintf("can recovery ch[0~%d]\n", CAN_MAX_CH-1);
+    cliPrintf("can filter all ch[0~%d]\n", CAN_MAX_CH-1);
   }
 }
 #endif

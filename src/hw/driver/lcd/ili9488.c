@@ -24,6 +24,17 @@
 #define ILI9488_SPI_TIMEOUT_MS                1000U
 
 /*
+ * 전원/리셋 타이밍.
+ *
+ * SETTLE 은 패널 전원이 올라올 때까지 기다리는 시간이고, LOW 와 WAIT 는
+ * 데이터시트가 요구하는 리셋 펄스 폭(10us 이상)과 리셋 해제 후 대기(120ms)에
+ * 여유를 얹은 값이다. 부팅 때 한 번만 도는 구간이라 넉넉히 잡아도 손해가 없다.
+ */
+#define ILI9488_POWER_SETTLE_MS               300U
+#define ILI9488_RESET_LOW_MS                  50U
+#define ILI9488_RESET_WAIT_MS                 150U
+
+/*
  * 비동기 전송용 변환 버퍼.
  *
  * ILI9488 은 SPI 에서 16bpp 를 받지 못하므로(데이터시트상 16-bit/pixel 은 병렬
@@ -121,19 +132,37 @@ bool ili9488Reset(void)
   spiSetDataMode(spi_ch, SPI_MODE0);
   spiAttachTxInterrupt(spi_ch, TransferDoneISR);
 
-  delay(5);
+  /*
+   * 리셋을 때리기 전에 패널 전원이 올라오기를 기다린다.
+   *
+   * 디스플레이 보드가 LCD 모듈보다 먼저 살아나는 배선이라, 부팅하자마자 RST 를
+   * 토글하면 컨트롤러는 아직 전원이 서지 않은 채로 그 펄스를 흘려보낸다. 그
+   * 뒤에 오는 레지스터 설정도 함께 사라지므로 화면은 끝까지 검은 채로 남는다.
+   * 백라이트는 컨트롤러를 거치지 않고 켜지기 때문에, 밖에서 보면 '불은 들어오는데
+   * 화면만 안 나오는' 모습이 된다. 여기서 한 번 기다려 두면 이후 리셋 펄스와
+   * 초기화가 모두 살아 있는 컨트롤러로 들어간다.
+   */
+  delay(ILI9488_POWER_SETTLE_MS);
 
   gpioPinWrite(ILI9488_RST_CH, _DEF_LOW);
-  delay(20);
+  delay(ILI9488_RESET_LOW_MS);
   gpioPinWrite(ILI9488_RST_CH, _DEF_HIGH);
-  delay(120);
+  delay(ILI9488_RESET_WAIT_MS);
 
   if (ili9488InitRegs() != true)
   {
     return false;
   }
 
-  if (ili9488SetRotation(1) != true)
+  /*
+   * 가로 방향에서 180도 돌린 화면.
+   *
+   * mode 1 과 3 은 둘 다 MV(행/열 교환)로 가로를 만들고, 3 은 거기에 MX 와 MY
+   * 미러를 더해 좌우와 상하를 같이 뒤집는다. 즉 컨트롤러가 프레임버퍼를 읽는
+   * 순서만 달라질 뿐이라 회전 비용이 따로 들지 않는다. TouchGFX 쪽 좌표계는
+   * 그대로 480x320 이므로 화면 구성 코드는 손댈 것이 없다.
+   */
+  if (ili9488SetRotation(3) != true)
   {
     return false;
   }

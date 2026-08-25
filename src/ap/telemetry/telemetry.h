@@ -53,6 +53,14 @@ bool telemetryInit(void);
 void telemetryUpdate(void);
 bool telemetryGetSignalSnapshot(telemetry_signal_snapshot_t *p_snapshot);
 
+/*
+ * 디코더가 실제로 읽는 ID 만 통과하도록 수신 필터를 좁힌다.
+ *
+ * canOpen() 은 뱅크 0~1 에 전체 통과 필터를 깔고 나오므로, 반드시 채널을 연
+ * 뒤에 불러야 한다. 순서를 뒤집으면 이 설정이 도로 덮인다.
+ */
+bool telemetryConfigCanFilter(uint8_t ch);
+
 #ifdef __cplusplus
 }
 #endif
