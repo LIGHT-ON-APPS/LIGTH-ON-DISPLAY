@@ -787,8 +787,18 @@ static void cliTelemetry(cli_args_t *args)
               (unsigned int)(signal.bms_min_cell_mv % 1000U));
     cliPrintf("bam rpm    : %ld rpm\n", (long)signal.bamocar_rpm);
     cliPrintf("bam torque : %ld raw\n", (long)signal.bamocar_torque_raw);
-    cliPrintf("bam n filt : %ld rpm\n",
-              (long)signal.bamocar_speed_filt_rpm);
+    /* 0xA8 은 APPS 요청 목록에서 뺐다(0x30 과 같은 회전수라 주기 슬롯만
+     * 먹었다). 디코더는 남겨 두되, 안 온 것을 0 rpm 으로 보여 주면 정지한
+     * 것처럼 읽히므로 수신 여부를 같이 찍는다. */
+    if ((signal.valid_mask & TELEMETRY_SIGNAL_BAMOCAR_SPEED_FILT_RPM) != 0U)
+    {
+      cliPrintf("bam n filt : %ld rpm\n",
+                (long)signal.bamocar_speed_filt_rpm);
+    }
+    else
+    {
+      cliPrintf("bam n filt : -- (0xA8 미요청)\n");
+    }
     cliPrintf("bam nmax   : %u rpm%s\n",
               (unsigned int)signal.bamocar_nmax_rpm,
               (signal.bamocar_nmax_rpm != 0U) ? "" : " (미수신, 기본 6500 적용)");
