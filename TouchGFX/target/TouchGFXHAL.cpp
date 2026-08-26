@@ -26,6 +26,7 @@
 #include "stm32l4xx_hal.h"
 #include "main.h"
 #include <touchgfx/hal/GPIO.hpp>
+#include <touchgfx/Application.hpp>
 extern "C"
 {
 #include "lcd.h"
@@ -117,6 +118,26 @@ extern "C" void touchgfxDisplayDriverTransmitBlock(const uint8_t* pixels, uint16
 
     /* 완료 통보는 lcdSetTransferDoneCallBack 으로 등록한 쪽에서 온다. */
 }
+
+/*
+ * 화면 전체를 다시 그리라고 알린다.
+ *
+ * 부분 프레임버퍼는 바뀐 영역만 보내므로, 패널을 리셋해 GRAM 이 비워진 뒤에는
+ * 아무도 다시 그려 주지 않는다. lcdReset() 뒤에 이걸 부르지 않으면 리셋이
+ * 성공해도 화면은 검은 채로 남아, 무엇이 문제인지 판단할 수가 없다.
+ *
+ * C 쪽(lcd.c 의 CLI)에서 부르는 통로다.
+ */
+extern "C" void touchgfxRequestFullRedraw(void)
+{
+    touchgfx::Application* app = touchgfx::Application::getInstance();
+
+    if (app != 0)
+    {
+        app->requestRedraw();
+    }
+}
+
 using namespace touchgfx;
 
 /* ******************************************************

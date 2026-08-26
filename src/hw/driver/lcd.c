@@ -21,6 +21,12 @@
 #include "lcd/ili9488.h"
 #endif
 
+#ifdef _USE_HW_TOUCHGFX
+/* TouchGFX 는 C++ 라 여기서 헤더를 읽을 수 없다. HAL 이 extern "C" 로 내보낸
+ * 것만 쓴다. 정의는 TouchGFX/target/TouchGFXHAL.cpp 에 있다. */
+extern void touchgfxRequestFullRedraw(void);
+#endif
+
 
 #ifndef _swap_int16_t
 #define _swap_int16_t(a, b) { int16_t t = a; a = b; b = t; }
@@ -174,18 +180,54 @@ bool lcdIsInit(void)
   return is_init;
 }
 
-void lcdReset(void)
+/*
+ * 패널을 처음부터 다시 세운다.
+ *
+ * 부팅 때 '백라이트만 켜지고 화면이 안 뜨는' 증상을 눈앞에서 격리하려고 열어 둔
+ * 경로다. 이 호출로 화면이 살아나면 원인은 부팅 시점의 전원/리셋 타이밍이고,
+ * 그래도 검은 채로 남으면 배선이나 SPI 신호 쪽을 봐야 한다. SPI 가 MOSI 단방향
+ * 이라 초기화가 실제로 먹었는지 읽어서 확인할 방법이 없으니, 이렇게 사람이 눈으로
+ * 가르는 수밖에 없다.
+ *
+ * is_init 이 false 여도 돈다. 초기화에 실패한 상태에서 다시 시도할 수 없으면
+ * 진단에 쓸 수가 없다.
+ */
+bool lcdReset(void)
 {
-  if ((is_init != true) || (lcd.reset == NULL))
+  if (lcd.reset == NULL)
   {
-    return;
+    return false;
+  }
+
+  /*
+   * 돌고 있는 DMA 전송 위로 리셋을 걸면 SPI 가 반쯤 나간 채로 끊긴다. 먼저
+   * 비워지길 기다린다. 타임아웃까지 안 끝나면 어차피 정상 상태가 아니므로
+   * 그대로 리셋을 진행한다.
+   */
+  {
+    uint32_t start_ms = millis();
+
+    while (lcdIsTxBusy() == true)
+    {
+      if ((millis() - start_ms) >= 1000U)
+      {
+        break;
+      }
+      delay(1);
+    }
   }
 
   if (lcd.reset() != true)
   {
     is_init = false;
     lcdSetBackLight(0);
+    return false;
   }
+
+  is_init = true;
+  lcdSetBackLight(100);
+
+  return true;
 }
 
 uint8_t lcdGetBackLight(void)
@@ -908,9 +950,37 @@ void cliLcd(cli_args_t *args)
     ret = true;
   }
 
+  if (args->argc == 1 && args->isStr(0, "reset") == true)
+  {
+    bool reset_ok;
+
+    cliPrintf("lcd reset...\n");
+
+    reset_ok = lcdReset();
+
+    cliPrintf("  result    : %s\n", (reset_ok == true) ? "OK" : "FAIL");
+    cliPrintf("  is_init   : %s\n", (lcdIsInit() == true) ? "true" : "false");
+    cliPrintf("  backlight : %d\n", (int)lcdGetBackLight());
+
+    if (reset_ok == true)
+    {
+#ifdef _USE_HW_TOUCHGFX
+      /* 리셋으로 비워진 GRAM 을 채우려면 화면 전체를 한 번 다시 그려야 한다. */
+      touchgfxRequestFullRedraw();
+      cliPrintf("  redraw    : requested\n");
+#else
+      lcdClearBuffer(black);
+      lcdUpdateDraw();
+#endif
+    }
+
+    ret = true;
+  }
+
   if (ret != true)
   {
     cliPrintf("lcd test\n");
+    cliPrintf("lcd reset\n");
   }
 }
 #endif

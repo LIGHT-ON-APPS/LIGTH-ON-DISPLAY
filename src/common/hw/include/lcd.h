@@ -71,7 +71,7 @@ typedef struct lcd_driver_t_
 
 bool lcdInit(void);
 bool lcdIsInit(void);
-void lcdReset(void);
+bool lcdReset(void);
 
 uint8_t lcdGetBackLight(void);
 void    lcdSetBackLight(uint8_t value);
