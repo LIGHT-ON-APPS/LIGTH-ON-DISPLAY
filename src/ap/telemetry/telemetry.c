@@ -111,6 +111,15 @@ typedef struct
   uint32_t last_ms;
 } telemetry_src_stat_t;
 
+/*
+ * Bamocar 응답을 레지스터 단위로 세기 위한 슬롯 수.
+ *
+ * 아래 bamocar_track_reg[] 의 항목 수 + 1(목록에 없는 레지스터를 모으는 칸).
+ * 표와 개수가 어긋나면 telemetryBamocarTrackReg() 가 남는 칸을 못 쓰거나
+ * 배열 밖을 짚으므로, 표를 고칠 때 이 값을 같이 고칠 것.
+ */
+#define TELEMETRY_BAMOCAR_TRACK_MAX           10U
+
 typedef struct
 {
   bool                        initialized;
@@ -126,6 +135,9 @@ typedef struct
 
   telemetry_src_stat_t        src[TELEMETRY_SRC_MAX];
   uint32_t                    rx_isr_cnt;
+
+  /* 0x181 응답의 레지스터별 수신 횟수. bamocar_track_reg[] 와 같은 순서다. */
+  uint16_t                    bamocar_reg_cnt[TELEMETRY_BAMOCAR_TRACK_MAX];
 } telemetry_t;
 
 static telemetry_t telemetry;
@@ -170,6 +182,28 @@ static const telemetry_temp_point_t bamocar_motor_temp_table[] =
   {15144U,  1050}, {15391U,  1100}, {15628U,  1150}, {15852U,  1200},
   {16061U,  1250}, {16251U,  1300}, {16421U,  1350}, {16569U,  1400},
   {16692U,  1450}, {16789U,  1500}, {16857U,  1550},
+};
+
+/*
+ * 수신 횟수를 따로 세는 Bamocar 레지스터.
+ *
+ * 0x181 프레임 총수만으로는 "무엇이 오고 무엇이 안 오는지" 가 갈리지 않는다.
+ * 요청 목록을 들고 있는 것은 APPS 이고 이 보드는 응답을 엿듣기만 하므로,
+ * 화면에서 한 칸만 비어 있을 때 그 레지스터가 버스에 아예 없는 것인지
+ * 우리 디코딩이 틀린 것인지 구분할 방법이 필요하다. 앞의 것부터 화면이
+ * 쓰는 순서로 두고, 목록에 없는 레지스터는 마지막 칸에 모아 센다.
+ */
+static const uint8_t bamocar_track_reg[TELEMETRY_BAMOCAR_TRACK_MAX - 1U] =
+{
+  TELEMETRY_BAMOCAR_REG_N_ACTUAL,
+  TELEMETRY_BAMOCAR_REG_MOTOR_TEMP,
+  TELEMETRY_BAMOCAR_REG_IGBT_TEMP,
+  TELEMETRY_BAMOCAR_REG_DC_BUS,
+  BAMOCAR_REG_STATUS,
+  TELEMETRY_BAMOCAR_REG_ERROR_WARNING,
+  TELEMETRY_BAMOCAR_REG_N_ACTUAL_FILT,
+  TELEMETRY_BAMOCAR_REG_TORQUE_OUT,
+  TELEMETRY_BAMOCAR_REG_NMAX,
 };
 
 #ifdef _USE_HW_CLI
@@ -421,6 +455,29 @@ static bool telemetryDecodeOrionCell(const can_msg_t *p_msg)
   return true;
 }
 
+/*
+ * 레지스터별 수신 횟수를 올린다. 표에 없는 레지스터는 마지막 칸으로 간다.
+ *
+ * 수신 인터럽트 안에서 도는 코드다. 9 칸 선형 탐색은 500 kbps 의 프레임
+ * 간격(최소 200 us)에 비하면 없는 것과 같다. 카운터는 넘쳐도 진단이
+ * "오고 있다/안 온다" 를 가리는 데는 지장이 없으므로 포화시키지 않는다.
+ */
+static void telemetryBamocarTrackReg(uint8_t reg_id)
+{
+  uint32_t slot = TELEMETRY_BAMOCAR_TRACK_MAX - 1U;
+
+  for (uint32_t i = 0U; i < (TELEMETRY_BAMOCAR_TRACK_MAX - 1U); i++)
+  {
+    if (bamocar_track_reg[i] == reg_id)
+    {
+      slot = i;
+      break;
+    }
+  }
+
+  telemetry.bamocar_reg_cnt[slot]++;
+}
+
 static bool telemetryDecodeBamocar(const can_msg_t *p_msg)
 {
   uint8_t reg_id;
@@ -441,6 +498,7 @@ static bool telemetryDecodeBamocar(const can_msg_t *p_msg)
   telemetryMarkSource(TELEMETRY_SRC_BAMOCAR, p_msg->timestamp);
 
   reg_id = p_msg->data[0];
+  telemetryBamocarTrackReg(reg_id);
 
   switch (reg_id)
   {
@@ -755,11 +813,56 @@ static void cliTelemetry(cli_args_t *args)
       }
     }
 
+    /*
+     * 0x181 이 오는데 화면 한 칸만 비어 있는 경우를 가른다. 아래에서 그
+     * 레지스터가 0 이면 인버터가 그 값을 아예 안 보내는 것이고(= 요청
+     * 목록을 들고 있는 APPS 쪽 문제), 0 이 아닌데 화면이 비어 있으면
+     * 디코딩이나 화면 쪽 문제다.
+     */
+    if (telemetry.src[TELEMETRY_SRC_BAMOCAR].frame_cnt > 0U)
+    {
+      static const char *reg_name[TELEMETRY_BAMOCAR_TRACK_MAX] =
+      {
+        "n_act", "t_motor", "t_igbt", "v_dcbus", "status",
+        "err/warn", "n_filt", "torque", "nmax", "other",
+      };
+
+      for (uint32_t i = 0U; i < TELEMETRY_BAMOCAR_TRACK_MAX; i++)
+      {
+        if (i < (TELEMETRY_BAMOCAR_TRACK_MAX - 1U))
+        {
+          cliPrintf("  0x%02X %-8s: %u\n",
+                    (unsigned int)bamocar_track_reg[i],
+                    reg_name[i],
+                    (unsigned int)telemetry.bamocar_reg_cnt[i]);
+        }
+        else
+        {
+          cliPrintf("  ---- %-8s: %u\n",
+                    reg_name[i],
+                    (unsigned int)telemetry.bamocar_reg_cnt[i]);
+        }
+      }
+    }
+
     if (telemetry.src[TELEMETRY_SRC_BAMOCAR].frame_cnt == 0U)
     {
       cliPrintf("hint       : no 0x181 yet. this board only listens;\n");
       cliPrintf("             the inverter stays silent until someone\n");
       cliPrintf("             sends the 0x201 repetition request.\n");
+    }
+
+    /*
+     * 0x36(셀 브로드캐스트)은 오는데 0x6B0 이 0 이면 BMS 도 버스도 살아
+     * 있다는 뜻이다. 0x6B0 은 Orion 의 기본 방송이 아니라 프로파일에서
+     * 직접 짜 넣는 프레임이라, 그 설정이 빠졌을 때 딱 이 모양이 된다.
+     */
+    if ((telemetry.src[TELEMETRY_SRC_ORION].frame_cnt == 0U) &&
+        (telemetry.src[TELEMETRY_SRC_ORION_CELL].frame_cnt > 0U))
+    {
+      cliPrintf("hint       : 0x36 arrives but 0x6B0 never does.\n");
+      cliPrintf("             0x6B0 is a user-defined broadcast in the\n");
+      cliPrintf("             Orion profile - check it is enabled.\n");
     }
 
     handled = true;
