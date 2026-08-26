@@ -81,14 +81,18 @@ protected:
      *
      * 순서는 tl, tr, bl, br 고정이다.
      *
-     * 조각을 얹는 것은 온도 칸 셋뿐이다. 상단 시프트 바와 가운데 RPM 자리는
-     * 바탕과 같은 흰 면이라 눈에 보이는 모서리가 없고, 거기에 조각을 놓으면
-     * 직선 테두리 없이 네 귀에만 곡선이 남아 점선 액자처럼 보인다.
+     * 조각을 얹는 것은 테두리를 갖는 칸 넷이다. 상단 시프트 바는 바탕과 같은
+     * 흰 면이라 눈에 보이는 모서리가 없고, 거기에 조각을 놓으면 직선 테두리
+     * 없이 네 귀에만 곡선이 남아 점선 액자처럼 보인다.
+     *
+     * 네 칸 모두 같은 규칙으로 물든다. RPM 칸의 임계는 시프트 바의 앰버/레드
+     * 지점과 같은 값이라, 막대가 색을 바꾸는 순간에 칸도 같이 바뀐다.
      */
     enum
     {
         PANEL_MOTOR = 0,
         PANEL_IGBT,
+        PANEL_RPM,
         PANEL_CELL,
         PANEL_COUNT
     };
@@ -116,20 +120,29 @@ protected:
     touchgfx::TextArea minCellLabel;
     touchgfx::TextArea minCellUnit;
 
-    /* Central RPM and system-state module. */
-    touchgfx::BoxWithBorder centerPanel;
-    touchgfx::TextAreaWithOneWildcard rpmText;
-    touchgfx::TextArea rpmLabel;
+    /*
+     * 가운데 셀 온도 모듈.
+     *
+     * 화면에서 가장 큰 글자가 여기 있다. 셀 온도는 팩을 세우는 값이고 한 번
+     * 오르면 되돌리는 데 시간이 걸리므로, 드라이버가 가장 먼저 보는 자리를
+     * 준다. 아래 온도 칸들과 같은 규칙으로 경고/고장에 면째 물든다.
+     */
+    touchgfx::BoxWithBorder cellPanel;
+    touchgfx::TextArea cellTempLabel;
+    touchgfx::TextAreaWithOneWildcard cellValue;
+    touchgfx::TextArea cellUnit;
+
+    /* System-state badge, 가운데 모듈 바로 아래. */
     touchgfx::BoxWithBorder statusPanel;
     touchgfx::Box statusAccent;
     touchgfx::TextArea statusText;
 
-    /* Bottom temperature tiles. Initials and units are static; only the large
-     * numeric widget is invalidated when telemetry changes.
+    /* Bottom row: 모터 온도, 인버터 온도, RPM. 이니셜과 단위는 값이 바뀌어도
+     * 그대로라, 숫자만 달라진 프레임에서는 값 사각형만 전송된다.
      *
-     * 화면에서 테두리를 갖는 자리는 여기 셋뿐이다. 바탕과 같은 흰 면이라
-     * 선이 없으면 어디까지가 한 칸인지 보이지 않는다. 칸이 경고나 고장으로
-     * 물들면 면 자체가 경계가 되므로 선은 면 색에 묻어 사라진다. */
+     * 바탕과 같은 흰 면이라 선이 없으면 어디까지가 한 칸인지 보이지 않는다.
+     * 칸이 경고나 고장으로 물들면 면 자체가 경계가 되므로 선은 면 색에 묻어
+     * 사라진다. */
     touchgfx::BoxWithBorder motorPanel;
     touchgfx::TextArea motorTempLabel;
     touchgfx::TextAreaWithOneWildcard motorValue;
@@ -140,10 +153,12 @@ protected:
     touchgfx::TextAreaWithOneWildcard igbtValue;
     touchgfx::TextArea igbtUnit;
 
-    touchgfx::BoxWithBorder cellPanel;
-    touchgfx::TextArea cellTempLabel;
-    touchgfx::TextAreaWithOneWildcard cellValue;
-    touchgfx::TextArea cellUnit;
+    /* 오른쪽 아래 칸은 RPM 이다. 온도 칸과 같은 틀을 쓰되 단위 자리를 비운다 --
+     * 회전수에는 붙일 기호가 없고, 이니셜 R 이 이미 무엇인지 말해 준다.
+     * 칸이 물드는 규칙은 온도 칸과 같다. */
+    touchgfx::BoxWithBorder rpmPanel;
+    touchgfx::TextArea rpmInitial;
+    touchgfx::TextAreaWithOneWildcard rpmText;
 
     touchgfx::Unicode::UnicodeChar rpmBuf[10];
     touchgfx::Unicode::UnicodeChar socBuf[10];
@@ -178,7 +193,27 @@ private:
     void applyShiftLights(int32_t rpm, bool valid);
     void applyLinkState();
 
-    /* 온도 타일 하나를 갱신한다. 세 타일이 규칙이 같아서 한 곳으로 묶었다. */
+    /*
+     * 칸 하나를 갱신한다. 온도 셋과 RPM 이 규칙이 같아서 한 곳으로 묶었다.
+     *
+     * shown 은 화면에 찍는 정수, compared 는 임계와 견주는 값이다. 온도는 이 둘이
+     * 다르다 — 표시는 정수로 반올림하지만 임계 판정은 0.1 도 단위 원값으로 한다.
+     * unit 은 단위가 없는 칸(RPM)에서 0 이다.
+     */
+    void updateTile(DrawnField& drawn,
+                    touchgfx::BoxWithBorder& panel,
+                    touchgfx::Image* corners,
+                    touchgfx::TextArea& initial,
+                    touchgfx::TextAreaWithOneWildcard& value,
+                    touchgfx::TextArea* unit,
+                    touchgfx::Unicode::UnicodeChar* buffer,
+                    int32_t shown,
+                    int32_t compared,
+                    bool valid,
+                    int32_t warn,
+                    int32_t crit);
+
+    /* 온도 칸 전용 껍데기. 0.1 도 단위를 위 규칙에 맞춰 넘긴다. */
     void updateTempTile(DrawnField& drawn,
                         touchgfx::BoxWithBorder& panel,
                         touchgfx::Image* corners,

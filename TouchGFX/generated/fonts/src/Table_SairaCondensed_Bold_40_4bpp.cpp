@@ -20,7 +20,8 @@ KEEP extern const touchgfx::GlyphNode glyphs_SairaCondensed_Bold_40_4bpp[] FONT_
     {  2815, 0x003F,  14,  28,  28,   1,  16,   0,   0, 0x00 }, // question
     {  3011, 0x0043,  14,  28,  28,   1,  16,   0,   0, 0x00 }, // C
     {  3207, 0x0049,   6,  28,  28,   2,  10,   0,   0, 0x00 }, // I
-    {  3291, 0x004D,  25,  28,  28,   2,  28,   0,   0, 0x00 }  // M
+    {  3291, 0x004D,  25,  28,  28,   2,  28,   0,   0, 0x00 }, // M
+    {  3655, 0x0052,  17,  28,  28,   2,  20,   0,   0, 0x00 }  // R
 };
 
 FONT_SEARCHTABLE_LOCATION_FLASH_PRAGMA
@@ -41,7 +42,8 @@ KEEP extern const uint16_t unicodelist_SairaCondensed_Bold_40_4bpp[] FONT_SEARCH
     0x003F,
     0x0043,
     0x0049,
-    0x004D
+    0x004D,
+    0x0052
 };
 
 // SairaCondensed_Bold_40_4bpp
@@ -59,6 +61,6 @@ touchgfx::UnmappedDataFont& getFont_SairaCondensed_Bold_40_4bpp();
 
 touchgfx::UnmappedDataFont& getFont_SairaCondensed_Bold_40_4bpp()
 {
-    static touchgfx::UnmappedDataFont SairaCondensed_Bold_40_4bpp(glyphs_SairaCondensed_Bold_40_4bpp, unicodelist_SairaCondensed_Bold_40_4bpp, 17, 40, 40, 0, 0, 4, 1, 0, 0, unicodes_SairaCondensed_Bold_40_4bpp, kerning_SairaCondensed_Bold_40_4bpp, 63, 0, 0, 0);
+    static touchgfx::UnmappedDataFont SairaCondensed_Bold_40_4bpp(glyphs_SairaCondensed_Bold_40_4bpp, unicodelist_SairaCondensed_Bold_40_4bpp, 18, 40, 40, 0, 0, 4, 1, 0, 0, unicodes_SairaCondensed_Bold_40_4bpp, kerning_SairaCondensed_Bold_40_4bpp, 63, 0, 0, 0);
     return SairaCondensed_Bold_40_4bpp;
 }

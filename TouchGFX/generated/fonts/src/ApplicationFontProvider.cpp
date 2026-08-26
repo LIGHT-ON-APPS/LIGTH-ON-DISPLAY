@@ -11,7 +11,7 @@ touchgfx::Font* ApplicationFontProvider::getFont(touchgfx::FontId typography)
 {
     switch (typography)
     {
-    case Typography::RPM:
+    case Typography::HERO:
         // SairaCondensed_Bold_68_4bpp
         return const_cast<touchgfx::Font*>(TypedTextDatabase::getFonts()[0]);
     case Typography::BATTERY:

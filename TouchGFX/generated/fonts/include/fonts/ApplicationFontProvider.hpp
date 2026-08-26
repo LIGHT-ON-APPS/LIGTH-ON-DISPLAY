@@ -13,7 +13,7 @@ class FlashDataReader;
 
 struct Typography
 {
-    static const touchgfx::FontId RPM = 0;
+    static const touchgfx::FontId HERO = 0;
     static const touchgfx::FontId BATTERY = 1;
     static const touchgfx::FontId HUGE = 2;
     static const touchgfx::FontId LARGE = 3;
@@ -26,7 +26,7 @@ struct Typography
 
 struct TypographyFontIndex
 {
-    static const touchgfx::FontId RPM = 0;     // SairaCondensed_Bold_68_4bpp
+    static const touchgfx::FontId HERO = 0;    // SairaCondensed_Bold_68_4bpp
     static const touchgfx::FontId BATTERY = 1; // SairaCondensed_Bold_52_4bpp
     static const touchgfx::FontId HUGE = 2;    // SairaCondensed_Bold_64_4bpp
     static const touchgfx::FontId LARGE = 1;   // SairaCondensed_Bold_52_4bpp

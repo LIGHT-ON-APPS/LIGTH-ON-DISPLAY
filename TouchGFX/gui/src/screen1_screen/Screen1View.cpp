@@ -70,12 +70,20 @@ const uint32_t TLM_IGBT_TEMP = 1UL << 9;
 const uint32_t TLM_CELL_MIN_V = 1UL << 16;
 
 const int32_t RPM_MAX = 6500;
-/* 숫자에 색이 붙는 유일한 구간. 그 아래 단계 구분은 시프트 바가 맡는다. */
-const int32_t RPM_RED_MIN = 4500;
 
 const int32_t SHIFT_AMBER_PM = 700;
 const int32_t SHIFT_RED_PM = 860;
 const int32_t SHIFT_BLINK_PM = 960;
+
+/*
+ * RPM 칸이 물드는 지점.
+ *
+ * 시프트 바가 앰버/레드로 넘어가는 회전수와 같은 값으로 잡는다. 두 표시가 서로
+ * 다른 지점에서 색을 바꾸면, 막대는 아직 초록인데 칸은 이미 앰버인 구간이
+ * 생겨서 어느 쪽을 믿어야 하는지가 흐려진다.
+ */
+const int32_t RPM_WARN = (RPM_MAX * SHIFT_AMBER_PM) / 1000;  /* 4550 */
+const int32_t RPM_CRIT = (RPM_MAX * SHIFT_RED_PM) / 1000;    /* 5590 */
 
 const int16_t CELL_WARN_DECIC = 480;
 const int16_t CELL_CRIT_DECIC = 550;
@@ -153,11 +161,40 @@ const int16_t BATTERY_TERMINAL_W = 8;
 const int16_t BATTERY_TERMINAL_H = 22;
 
 /*
- * 온도 세 자리의 배치.
+ * 가운데 셀 온도 모듈.
  *
- * 한 줄에 이니셜 / 값 / 단위가 나란히 선다. M I C 는 어느 온도인지만 짚어 주면
+ * 예전에 RPM 이 쓰던 자리다. 셀 온도는 한 번 오르면 식을 때까지 주행이 묶이는
+ * 값이고, 드라이버가 손쓸 수 있는 시점은 오르는 중일 때뿐이다. 그래서 화면에서
+ * 가장 먼저 눈에 들어오는 자리와 가장 큰 글자(68 px)를 여기에 준다.
+ *
+ * 라벨은 위, 값과 단위는 한 줄이다 — 아래 칸들과 순서가 같아 눈이 옮겨가도
+ * 읽는 방법이 달라지지 않는다. 값 폭 92 는 68 px 세 자리(85)가 들어가는 최소치고,
+ * 단위는 오른쪽 끝에 고정해 자리수가 늘어도 밀리지 않는다.
+ */
+const int16_t CELL_PANEL_X = 176;
+const int16_t CELL_PANEL_Y = 44;
+const int16_t CELL_PANEL_W = 128;
+const int16_t CELL_PANEL_H = 126;
+const int16_t CELL_LABEL_Y = 54;
+const int16_t CELL_LABEL_H = 20;
+const int16_t CELL_VALUE_X = 176;
+const int16_t CELL_VALUE_Y = 81;
+const int16_t CELL_VALUE_W = 92;
+const int16_t CELL_VALUE_H = 84;
+/* 값보다 27 px 아래. 68 px 과 30 px 의 대문자 높이 차이만큼 내려 밑선을 맞춘다. */
+const int16_t CELL_UNIT_X = 270;
+const int16_t CELL_UNIT_Y = 108;
+const int16_t CELL_UNIT_W = 34;
+const int16_t CELL_UNIT_H = 36;
+
+/*
+ * 아래 세 칸의 배치.
+ *
+ * 한 줄에 이니셜 / 값 / 단위가 나란히 선다. M I R 은 어느 값인지만 짚어 주면
  * 되는 표시라 한 글자로 충분하고, 그 덕에 값이 한 줄을 통째로 쓴다.
  * 세 자리가 규칙이 같아서 왼쪽 것의 좌표만 두고 나머지는 TILE_PITCH 로 민다.
+ *
+ * 값 폭 86 은 40 px 네 자리(75)까지 받는다 — RPM 이 이 줄로 내려왔기 때문이다.
  */
 const int16_t TILE_Y = 236;
 const int16_t TILE_W = 146;
@@ -310,20 +347,22 @@ void placeArc(touchgfx::CircleProgress& arc,
 }
 
 /*
- * 온도 한 자리를 배치한다.
+ * 아래 줄 한 칸을 배치한다.
  *
  * 이니셜은 값과 같은 40 px 이되 색이 한 단계 흐리다. 크기를 줄이지 않는 것은
- * M I C 가 값과 한 줄에 서 있기 때문이다 — 같은 줄에서 크기까지 달라지면
+ * M I R 이 값과 한 줄에 서 있기 때문이다 — 같은 줄에서 크기까지 달라지면
  * 줄이 울퉁불퉁해 보인다. 위계는 크기가 아니라 색이 만든다.
+ *
+ * 단위는 여기서 놓지 않는다. RPM 칸에는 붙일 기호가 없다.
  */
-void placeTempTile(touchgfx::BoxWithBorder& panel,
-                   touchgfx::Image* corners,
-                   touchgfx::TextArea& label,
-                   touchgfx::TextAreaWithOneWildcard& value,
-                   touchgfx::Unicode::UnicodeChar* buffer,
-                   touchgfx::TextArea& unit,
-                   int16_t x,
-                   TEXTS labelId)
+void placeTile(touchgfx::BoxWithBorder& panel,
+               touchgfx::Image* corners,
+               touchgfx::TextArea& label,
+               touchgfx::TextAreaWithOneWildcard& value,
+               touchgfx::Unicode::UnicodeChar* buffer,
+               int16_t x,
+               TEXTS labelId,
+               TEXTS valueId)
 {
     placePanel(panel, x, TILE_Y, TILE_W, TILE_H);
     /* 평상시 칸은 바탕과 같은 흰 면이라, 선이 없으면 어디까지가 한 칸인지
@@ -338,9 +377,22 @@ void placeTempTile(touchgfx::BoxWithBorder& panel,
     placeValue(value, buffer,
                static_cast<int16_t>(x + TILE_VALUE_DX),
                static_cast<int16_t>(TILE_Y + TILE_VALUE_DY),
-               TILE_VALUE_W, TILE_VALUE_H, T_T_TEMPVALUE);
-    /* 단위는 값보다 한 단계 작고(40 -> 30) 한 단계 흐리다. y 를 값보다 8 px
-     * 내린 것은 두 폰트 크기 차이만큼 밑선을 맞추기 위함이다. */
+               TILE_VALUE_W, TILE_VALUE_H, valueId);
+}
+
+/* 온도 칸은 위 틀에 단위 하나를 더 얹은 것이다. 단위는 값보다 한 단계
+ * 작고(40 -> 30) 한 단계 흐리다. y 를 값보다 8 px 내린 것은 두 폰트 크기
+ * 차이만큼 밑선을 맞추기 위함이다. */
+void placeTempTile(touchgfx::BoxWithBorder& panel,
+                   touchgfx::Image* corners,
+                   touchgfx::TextArea& label,
+                   touchgfx::TextAreaWithOneWildcard& value,
+                   touchgfx::Unicode::UnicodeChar* buffer,
+                   touchgfx::TextArea& unit,
+                   int16_t x,
+                   TEXTS labelId)
+{
+    placeTile(panel, corners, label, value, buffer, x, labelId, T_T_TEMPVALUE);
     placeLabel(unit,
                static_cast<int16_t>(x + TILE_UNIT_DX),
                static_cast<int16_t>(TILE_Y + TILE_UNIT_DY),
@@ -516,13 +568,32 @@ Screen1View::Screen1View()
                T_T_MINCELLUNIT);
     add(minCellUnit);
 
-    /* Central RPM module replaces a decorative third gauge. */
-    placePanel(centerPanel, 176, 44, 128, 178);
-    add(centerPanel);
-    placeLabel(rpmLabel, 176, 52, 128, 20, T_T_RPMUNIT);
-    add(rpmLabel);
-    placeValue(rpmText, rpmBuf, 176, 70, 128, 92, T_T_RPM);
-    add(rpmText);
+    /*
+     * 가운데 셀 온도.
+     *
+     * 아래 칸들과 같이 테두리와 모서리 조각을 두른다 — 경고나 고장에 면째
+     * 물들어야 하는 자리이고, 그때 네 귀가 각지면 아래 줄과 따로 놀아 보인다.
+     */
+    placePanel(cellPanel, CELL_PANEL_X, CELL_PANEL_Y,
+               CELL_PANEL_W, CELL_PANEL_H);
+    cellPanel.setBorderColor(rgb(BORDER_R, BORDER_G, BORDER_B));
+    cellPanel.setBorderSize(1U);
+    placeCorners(panelCorner[PANEL_CELL], CELL_PANEL_X, CELL_PANEL_Y,
+                 CELL_PANEL_W, CELL_PANEL_H, CORNER_WHITE);
+    add(cellPanel);
+    for (uint8_t i = 0U; i < 4U; i++)
+    {
+        add(panelCorner[PANEL_CELL][i]);
+    }
+    placeLabel(cellTempLabel, CELL_PANEL_X, CELL_LABEL_Y,
+               CELL_PANEL_W, CELL_LABEL_H, T_T_CELLTEMPLABEL);
+    add(cellTempLabel);
+    placeValue(cellValue, cellBuf, CELL_VALUE_X, CELL_VALUE_Y,
+               CELL_VALUE_W, CELL_VALUE_H, T_T_CELLTEMPVALUE);
+    add(cellValue);
+    placeLabel(cellUnit, CELL_UNIT_X, CELL_UNIT_Y,
+               CELL_UNIT_W, CELL_UNIT_H, T_T_DEGC);
+    add(cellUnit);
 
     /*
      * 차량 상태 표시.
@@ -540,7 +611,7 @@ Screen1View::Screen1View()
     add(statusText);
 
     /*
-     * Bottom temperature row.
+     * Bottom row: 모터 온도, 인버터 온도, RPM.
      *
      * 이니셜과 단위는 값이 바뀌어도 그대로라, 숫자만 달라진 프레임에서는 값
      * 사각형만 전송된다.
@@ -568,17 +639,18 @@ Screen1View::Screen1View()
     add(igbtValue);
     add(igbtUnit);
 
-    placeTempTile(cellPanel, panelCorner[PANEL_CELL], cellTempLabel, cellValue, cellBuf, cellUnit,
-                  static_cast<int16_t>(TILE_X0 + (2 * TILE_PITCH)),
-                  T_T_CELLINITIAL);
-    add(cellPanel);
+    /* 셋째 칸은 RPM 이다. 단위 자리는 비운다 — 회전수에는 붙일 기호가 없고,
+     * 이니셜 R 이 이미 무엇인지 말해 준다. */
+    placeTile(rpmPanel, panelCorner[PANEL_RPM], rpmInitial, rpmText, rpmBuf,
+              static_cast<int16_t>(TILE_X0 + (2 * TILE_PITCH)),
+              T_T_RPMINITIAL, T_T_RPM);
+    add(rpmPanel);
     for (uint8_t i = 0U; i < 4U; i++)
     {
-        add(panelCorner[PANEL_CELL][i]);
+        add(panelCorner[PANEL_RPM][i]);
     }
-    add(cellTempLabel);
-    add(cellValue);
-    add(cellUnit);
+    add(rpmInitial);
+    add(rpmText);
 }
 
 void Screen1View::setupScreen()
@@ -698,32 +770,28 @@ void Screen1View::handleTickEvent()
 }
 
 /*
- * 온도 타일 갱신.
+ * 칸 하나 갱신.
  *
- * 임계를 넘으면 숫자 색만 바꾸는 대신 타일 배경째 채우고 글자를 흰색으로
+ * 임계를 넘으면 숫자 색만 바꾸는 대신 칸 배경째 채우고 글자를 흰색으로
  * 뒤집는다. 밝은 바탕에서는 작은 글자의 색보다 큰 면적이 훨씬 빨리 읽히고,
  * 햇빛에 화면이 씻겨도 면은 끝까지 남는다.
  *
- * 배경이 바뀔 때만 타일 전체를 다시 그린다. 숫자만 달라진 프레임에서 타일을
+ * 배경이 바뀔 때만 칸 전체를 다시 그린다. 숫자만 달라진 프레임에서 칸을
  * 통째로 갱신하면 그게 그대로 프레임 시간이 된다.
  */
-void Screen1View::updateTempTile(DrawnField& drawn,
-                                 touchgfx::BoxWithBorder& panel,
-                                 touchgfx::Image* corners,
-                                 touchgfx::TextArea& initial,
-                                 touchgfx::TextAreaWithOneWildcard& value,
-                                 touchgfx::TextArea& unit,
-                                 touchgfx::Unicode::UnicodeChar* buffer,
-                                 int16_t decic,
-                                 bool valid,
-                                 int16_t warnDecic,
-                                 int16_t critDecic)
+void Screen1View::updateTile(DrawnField& drawn,
+                             touchgfx::BoxWithBorder& panel,
+                             touchgfx::Image* corners,
+                             touchgfx::TextArea& initial,
+                             touchgfx::TextAreaWithOneWildcard& value,
+                             touchgfx::TextArea* unit,
+                             touchgfx::Unicode::UnicodeChar* buffer,
+                             int32_t shown,
+                             int32_t compared,
+                             bool valid,
+                             int32_t warn,
+                             int32_t crit)
 {
-    /* 화면에 실제로 뜨는 값. 임계 비교는 0.1 도 단위 그대로 두고, 다시 그릴지
-     * 판단하는 비교만 이 값으로 한다. 그래야 표시가 그대로인 0.1 도 흔들림에
-     * 칸을 다시 그리지 않는다. */
-    const int32_t whole = roundDeci(decic);
-
     touchgfx::colortype fill;  /* 칸 바탕 */
     touchgfx::colortype ink;   /* 숫자 */
     touchgfx::colortype trim;  /* 이니셜과 단위 */
@@ -737,14 +805,14 @@ void Screen1View::updateTempTile(DrawnField& drawn,
         trim = ink;
         cornerIds = CORNER_WHITE;
     }
-    else if (decic >= critDecic)
+    else if (compared >= crit)
     {
         fill = rgb(FAULT_R, FAULT_G, FAULT_B);
         ink = rgb(ONFILL_R, ONFILL_G, ONFILL_B);
         trim = ink;
         cornerIds = CORNER_CRIT;
     }
-    else if (decic >= warnDecic)
+    else if (compared >= warn)
     {
         fill = rgb(WARN_R, WARN_G, WARN_B);
         ink = rgb(ONFILL_R, ONFILL_G, ONFILL_B);
@@ -768,7 +836,7 @@ void Screen1View::updateTempTile(DrawnField& drawn,
                   (drawn.color != fill) ||
                   (drawn.ink != ink);
 
-    if ((fieldChanged(drawn, whole, valid, fill) != true) &&
+    if ((fieldChanged(drawn, shown, valid, fill) != true) &&
         (fillChanged != true))
     {
         return;
@@ -777,7 +845,7 @@ void Screen1View::updateTempTile(DrawnField& drawn,
 
     if (valid)
     {
-        formatWhole(buffer, 10U, whole);
+        formatWhole(buffer, 10U, shown);
     }
     else
     {
@@ -795,7 +863,10 @@ void Screen1View::updateTempTile(DrawnField& drawn,
         swapCorners(corners, cornerIds);
         initial.setColor(trim);
         value.setColor(ink);
-        unit.setColor(trim);
+        if (unit != 0)
+        {
+            unit->setColor(trim);
+        }
 
         /* 세 위젯을 따로 갱신하는 대신 칸 전체를 dirty 로 만든다. 그 영역에
          * 겹친 글자들이 함께 다시 그려진다. */
@@ -805,6 +876,28 @@ void Screen1View::updateTempTile(DrawnField& drawn,
     {
         value.invalidate();
     }
+}
+
+/*
+ * 온도 칸.
+ *
+ * 화면에 뜨는 값은 정수로 반올림하되 임계 판정은 0.1 도 단위 원값으로 한다.
+ * 그래야 표시가 그대로인 0.1 도 흔들림에 칸을 다시 그리지 않는다.
+ */
+void Screen1View::updateTempTile(DrawnField& drawn,
+                                 touchgfx::BoxWithBorder& panel,
+                                 touchgfx::Image* corners,
+                                 touchgfx::TextArea& initial,
+                                 touchgfx::TextAreaWithOneWildcard& value,
+                                 touchgfx::TextArea& unit,
+                                 touchgfx::Unicode::UnicodeChar* buffer,
+                                 int16_t decic,
+                                 bool valid,
+                                 int16_t warnDecic,
+                                 int16_t critDecic)
+{
+    updateTile(drawn, panel, corners, initial, value, &unit, buffer,
+               roundDeci(decic), decic, valid, warnDecic, critDecic);
 }
 
 void Screen1View::applyLinkState()
@@ -910,36 +1003,13 @@ void Screen1View::updateTelemetry(bool fresh,
             ((bounded + (RPM_DISPLAY_STEP / 2)) / RPM_DISPLAY_STEP) *
             RPM_DISPLAY_STEP;
         /*
-         * RPM 숫자는 색으로 상태를 말하지 않는다.
-         *
-         * 회전수 구간은 바로 위 시프트 바가 초록 -> 앰버 -> 레드로 이미 보여
-         * 주고 있다. 화면에서 가장 큰 글자까지 같은 정보를 색으로 되풀이하면,
-         * 숫자가 쉬지 않고 색을 갈아입는 통에 정작 레드존의 빨강이 평범해진다.
-         * 숫자는 읽는 값으로만 두고 레드존에서만 색을 준다.
+         * 아래 줄의 다른 칸들과 같은 규칙으로 물든다. 임계 비교는 눈금으로
+         * 끊기 전의 값(bounded)으로 한다 -- 표시 반올림 때문에 칸이 임계
+         * 근처에서 깜빡이지 않게 하기 위함이다.
          */
-        touchgfx::colortype color = rgb(DIM_R, DIM_G, DIM_B);
-
-        if (haveRpm)
-        {
-            color = (bounded >= RPM_RED_MIN)
-                        ? rgb(FAULT_R, FAULT_G, FAULT_B)
-                        : rgb(FG_R, FG_G, FG_B);
-        }
-
-        if (fieldChanged(rpmDrawn, stepped, haveRpm, color))
-        {
-            if (haveRpm)
-            {
-                touchgfx::Unicode::snprintf(rpmBuf, 10U, "%d",
-                                            static_cast<int>(stepped));
-            }
-            else
-            {
-                formatUnknown(rpmBuf, 10U);
-            }
-            rpmText.setColor(color);
-            rpmText.invalidate();
-        }
+        updateTile(rpmDrawn, rpmPanel, panelCorner[PANEL_RPM],
+                   rpmInitial, rpmText, 0, rpmBuf,
+                   stepped, bounded, haveRpm, RPM_WARN, RPM_CRIT);
     }
     applyShiftLights(motorRpm, haveRpm);
 
