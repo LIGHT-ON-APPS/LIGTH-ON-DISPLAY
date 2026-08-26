@@ -35,6 +35,27 @@
 #define ILI9488_RESET_WAIT_MS                 150U
 
 /*
+ * 소프트 리셋 후 대기.
+ *
+ * 데이터시트는 SWRESET 다음 명령까지 5ms, 그중에서도 SLPOUT 을 보내려면 120ms 를
+ * 기다리라고 한다. 컨트롤러가 내부 전압을 다시 세우는 동안이라 그 전에 들어온
+ * SLPOUT 은 그냥 버려진다. 버려져도 SPI 쓰기 자체는 성공하므로 뒤따르는 레지스터
+ * 설정과 DISPON 은 그대로 들어가고, 결과는 '백라이트만 켜지고 화면은 검은' 상태다.
+ */
+#define ILI9488_SWRESET_WAIT_MS               150U
+
+/*
+ * SPI 분주.
+ *
+ * 프레임은 픽셀당 3바이트라 전송량이 많아 20MHz(분주 4)로 밀지만, 그 값은
+ * 데이터시트 쓰기 사이클 하한(50ns)에 정확히 걸려 마진이 없다. 부팅 초기화는
+ * 총 수십 바이트뿐이라 속도가 아무 의미가 없으므로, 이 구간만 5MHz 로 내려
+ * 배선/노이즈 여유를 벌고 끝나면 프레임 속도로 되돌린다.
+ */
+#define ILI9488_SPI_DIV_INIT                  16U
+#define ILI9488_SPI_DIV_FRAME                 4U
+
+/*
  * 비동기 전송용 변환 버퍼.
  *
  * ILI9488 은 SPI 에서 16bpp 를 받지 못하므로(데이터시트상 16-bit/pixel 은 병렬
@@ -115,6 +136,8 @@ bool ili9488InitDriver(lcd_driver_t *p_driver)
 
 bool ili9488Reset(void)
 {
+  bool ret;
+
   ili9488GpioInit();
 
   is_write_frame = false;
@@ -130,6 +153,7 @@ bool ili9488Reset(void)
 
   spiSetBitWidth(spi_ch, 8);
   spiSetDataMode(spi_ch, SPI_MODE0);
+  spiSetClockDivider(spi_ch, ILI9488_SPI_DIV_INIT);
   spiAttachTxInterrupt(spi_ch, TransferDoneISR);
 
   /*
@@ -149,11 +173,6 @@ bool ili9488Reset(void)
   gpioPinWrite(ILI9488_RST_CH, _DEF_HIGH);
   delay(ILI9488_RESET_WAIT_MS);
 
-  if (ili9488InitRegs() != true)
-  {
-    return false;
-  }
-
   /*
    * 가로 방향에서 180도 돌린 화면.
    *
@@ -162,12 +181,13 @@ bool ili9488Reset(void)
    * 순서만 달라질 뿐이라 회전 비용이 따로 들지 않는다. TouchGFX 쪽 좌표계는
    * 그대로 480x320 이므로 화면 구성 코드는 손댈 것이 없다.
    */
-  if (ili9488SetRotation(3) != true)
-  {
-    return false;
-  }
+  ret = (ili9488InitRegs() == true) && (ili9488SetRotation(3) == true);
 
-  return true;
+  /* 중간에 실패해도 분주는 되돌린다. 초기화 구간용 저속이 그대로 남으면
+   * 이후 프레임 전송이 이유 없이 4배 느려진다. */
+  spiSetClockDivider(spi_ch, ILI9488_SPI_DIV_FRAME);
+
+  return ret;
 }
 
 uint16_t ili9488GetWidth(void)
@@ -259,7 +279,7 @@ static bool ili9488InitRegs(void)
   {
     return false;
   }
-  delay(10);
+  delay(ILI9488_SWRESET_WAIT_MS);
 
   if (writecommand(ILI9488_SLPOUT) != true)
   {

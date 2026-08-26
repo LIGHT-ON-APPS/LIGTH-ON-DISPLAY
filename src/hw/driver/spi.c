@@ -171,6 +171,38 @@ void spiSetBitWidth(uint8_t ch, uint8_t bit_width)
   HAL_SPI_Init(p_spi->h_spi);
 }
 
+/*
+ * 전송 클럭을 바꾼다. divider 는 PCLK 를 나누는 값(2~256)이고, 목록에 없는 값은
+ * 가장 느린 256 으로 떨어진다.
+ *
+ * 한 번 정하면 spiSetBitWidth() 나 spiSetDataMode() 가 HAL_SPI_Init() 을 다시
+ * 불러도 핸들에 남아 그대로 유지된다.
+ */
+void spiSetClockDivider(uint8_t ch, uint16_t divider)
+{
+  spi_t  *p_spi = &spi_tbl[ch];
+  uint32_t prescaler;
+
+  if (p_spi->is_open == false) return;
+
+  switch (divider)
+  {
+    case 2:    prescaler = SPI_BAUDRATEPRESCALER_2;   break;
+    case 4:    prescaler = SPI_BAUDRATEPRESCALER_4;   break;
+    case 8:    prescaler = SPI_BAUDRATEPRESCALER_8;   break;
+    case 16:   prescaler = SPI_BAUDRATEPRESCALER_16;  break;
+    case 32:   prescaler = SPI_BAUDRATEPRESCALER_32;  break;
+    case 64:   prescaler = SPI_BAUDRATEPRESCALER_64;  break;
+    case 128:  prescaler = SPI_BAUDRATEPRESCALER_128; break;
+    default:   prescaler = SPI_BAUDRATEPRESCALER_256; break;
+  }
+
+  if (p_spi->h_spi->Init.BaudRatePrescaler == prescaler) return;
+
+  p_spi->h_spi->Init.BaudRatePrescaler = prescaler;
+  HAL_SPI_Init(p_spi->h_spi);
+}
+
 // 1bye씩
 uint8_t spiTransfer8(uint8_t ch, uint8_t data)
 {
