@@ -56,23 +56,47 @@
  * NMAX 가 이와 다르게 잡혀 있으면 0xCE 가 오기 전까지 표시 회전수는 그 비율
  * 만큼 어긋난다. 0xCE 는 아무도 요청하지 않으므로, 정확히 하려면 APPS 의
  * 요청 목록에 0xCE 를 한 줄 넣으면 된다(한 번만 와도 그 뒤로 계속 맞는다).
+ *
+ * 참고로 이전 계기판 펌웨어는 여기에 6000 을 썼다. 어느 쪽도 드라이브에서
+ * 확인한 값이 아니라 6500 을 그대로 둔다 — 둘 중 무엇이 맞든 표시 회전수만
+ * 8 % 어긋나고, 0xCE 를 한 번 받으면 그 순간 정확해진다.
  */
 #define TELEMETRY_BAMOCAR_N_MAX_RPM_DEFAULT   6500L
 
 /*
- * Orion BMS 2 CAN frames are user-configured. This decoder expects:
+ * BMS 요약 프레임.
  *
- *   CAN ID 0x6B0, standard, 8 bytes, big-endian
+ * 이 차의 BMS 가 실제로 무엇을 어디에 싣는지는 F411 이전에 쓰던 계기판
+ * 펌웨어(KSAE_L432KC_Display_ver2.6 의 main.c)가 정본이다. 거기서 쓰던
+ * 두 ID 를 그대로 가져왔다. 처음 이 파일에 적혀 있던 0x6B0 은 버스에
+ * 존재하지 않는다 — 2026-08-26 에 'telemetry scan' 으로 확인했다.
+ *
+ *   CAN ID 0x446, standard, 8 bytes, big-endian
+ *     [0..1] Power            u16, 눈금 미확인
+ *     [2..3] Min cell voltage u16, 0.1 mV/bit
+ *     [4]    High temperature i8,  1 degC/bit
+ *     [5]    Low temperature  i8,  1 degC/bit
+ *     [6]    Pack SOC         u8,  0.5 %/bit
+ *
+ *   CAN ID 0x447, standard, big-endian
  *     [0..1] Pack voltage     u16, 0.1 V/bit
- *     [2..3] Pack current     i16, 0.1 A/bit (+ = discharge)
- *     [4..5] Pack SOC         u16, 0.5 %/bit
- *     [6..7] High temperature i16, 1 degC/bit
+ *     [2..3] Pack current     i16, 0.1 A/bit
+ *
+ * 실측 대조 (LV 만 켠 상태, 0x446 = 00 00 9B BA 18 16 C7 4A):
+ * 최소 셀 3.9866 V 는 같은 시각 0x036 셀 브로드캐스트가 준 값과 일치했고,
+ * 온도 24/22 도와 SOC 99.5 % 도 그대로 말이 된다.
+ *
+ * 전류의 부호는 아직 못 봤다(LV 만이라 0 이었다). 화면은 전류를 쓰지 않으니
+ * 지금 틀려도 표시에는 영향이 없지만, 나중에 쓸 일이 생기면 충전/방전 방향을
+ * 먼저 확인할 것.
  */
-#define TELEMETRY_ORION_CAN_ID                0x6B0U
+#define TELEMETRY_ORION_CAN_ID                0x446U
+#define TELEMETRY_ORION_PACK_CAN_ID           0x447U
 #define TELEMETRY_ORION_VOLT_MV_PER_BIT       100L
 #define TELEMETRY_ORION_CURR_MA_PER_BIT       100L
 #define TELEMETRY_ORION_SOC_PERMILLE_PER_BIT  5L
 #define TELEMETRY_ORION_TEMP_DECIC_PER_BIT    10L
+#define TELEMETRY_ORION_CELL_MV_PER_10_BIT    10U
 
 /* Orion's optional battery-cell broadcast sends one cell per frame. The BMS
  * profile must enable this broadcast on the vehicle CAN interface and use the
@@ -81,6 +105,20 @@
 #define TELEMETRY_ORION_CELL_CAN_ID            0x36U
 #define TELEMETRY_ORION_CELL_VOLT_MAX_DECIMV   50000U
 #define TELEMETRY_ORION_CELL_TIMEOUT_MS         3000U
+
+/*
+ * 소스가 조용해지면 그 소스가 만든 신호를 무효로 돌린다.
+ *
+ * 이게 없으면 valid_mask 는 한 번 선 비트가 영원히 남는다. 화면 전체의
+ * 신선도(telemetry_fresh)는 어느 ID 든 하나만 살아 있으면 유지되므로,
+ * 셀 브로드캐스트가 초당 250 프레임씩 오는 동안 인버터가 조용해져도
+ * 모터/IGBT 온도는 마지막 값을 계속 붙들고 있게 된다. 실제로는 값을
+ * 모르는 상태인데 화면은 정상값을 보여주는 셈이라, 온도처럼 오르는 쪽이
+ * 위험한 신호에서는 그대로 두면 안 된다.
+ *
+ * 가장 느린 것이 0x446/0x447(20 Hz 안팎)이라 1 초면 여유가 충분하다.
+ */
+#define TELEMETRY_SRC_TIMEOUT_MS                1000U
 
 typedef struct
 {
@@ -100,6 +138,7 @@ typedef struct
 typedef enum
 {
   TELEMETRY_SRC_ORION = 0,
+  TELEMETRY_SRC_ORION_PACK,
   TELEMETRY_SRC_ORION_CELL,
   TELEMETRY_SRC_BAMOCAR,
   TELEMETRY_SRC_MAX
@@ -285,23 +324,75 @@ static int16_t telemetryTempRawToDeciC(uint16_t raw,
   return 0;
 }
 
-/* 정규화된 회전수(±32767)를 rpm 으로. 분모는 0xCE 를 받았으면 그 값이다. */
+/*
+ * 정규화된 회전수(±32767)를 rpm 으로. 분모는 0xCE 를 받았으면 그 값이다.
+ *
+ * 부호는 버리고 크기만 쓴다. 이 차는 전진할 때 raw 가 음수로 오는데(이전
+ * 계기판 펌웨어가 화면에 그릴 때 `-hv_rpm` 으로 뒤집어 쓰고 있었다),
+ * 화면은 회전수를 0 아래로 클램프하므로 그대로 두면 주행 중에도 0 이
+ * 찍힌다. 계기판에 필요한 것은 방향이 아니라 얼마나 도는지이고, 회생
+ * 제동 중에도 바퀴는 같은 방향으로 돌기 때문에 절댓값이 맞다. 방향까지
+ * 봐야 할 일이 생기면 여기가 아니라 별도 신호로 빼는 게 낫다.
+ */
 static int32_t telemetryBamocarSpeedToRpm(uint16_t raw)
 {
   int32_t nmax = (telemetry.signal.bamocar_nmax_rpm != 0U)
                      ? (int32_t)telemetry.signal.bamocar_nmax_rpm
                      : TELEMETRY_BAMOCAR_N_MAX_RPM_DEFAULT;
+  int32_t rpm = ((int32_t)(int16_t)raw * nmax) / 32767L;
 
-  return ((int32_t)(int16_t)raw * nmax) / 32767L;
+  return (rpm < 0) ? -rpm : rpm;
 }
 
+/* 0x446 — 전력, 최소 셀 전압, 최고/최저 온도, SOC. */
 static bool telemetryDecodeOrion(const can_msg_t *p_msg)
+{
+  if ((p_msg->id_type != CAN_STD) ||
+      (p_msg->id != TELEMETRY_ORION_CAN_ID) ||
+      (p_msg->length < 7U))
+  {
+    return false;
+  }
+
+  telemetry.signal.bms_power_raw = telemetryReadU16Be(&p_msg->data[0]);
+  telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BMS_POWER;
+
+  /*
+   * 이 프레임도 최소 셀 전압을 싣지만 화면에는 쓰지 않는다. 0x036 셀
+   * 브로드캐스트 쪽 스캔이 이미 그 값을 만들고 있고, 거기에는 표시 중인
+   * 값보다 낮은 셀을 보면 스캔 완성을 기다리지 않고 즉시 내리는 안전
+   * 규칙이 붙어 있다. 두 곳에서 같은 필드를 쓰면 그 규칙과 타임아웃이
+   * 서로 엉킨다. 교차 확인이 필요하면 CLI 로 두 값을 나란히 본다.
+   */
+
+  telemetry.signal.bms_max_temp_decic =
+      (int16_t)((int32_t)(int8_t)p_msg->data[4] *
+                TELEMETRY_ORION_TEMP_DECIC_PER_BIT);
+  telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BMS_MAX_TEMP_DECIC;
+
+  telemetry.signal.bms_min_temp_decic =
+      (int16_t)((int32_t)(int8_t)p_msg->data[5] *
+                TELEMETRY_ORION_TEMP_DECIC_PER_BIT);
+  telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BMS_MIN_TEMP_DECIC;
+
+  telemetry.signal.bms_soc_permille =
+      (uint16_t)((uint32_t)p_msg->data[6] *
+                 (uint32_t)TELEMETRY_ORION_SOC_PERMILLE_PER_BIT);
+  telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BMS_SOC_PERMILLE;
+
+  telemetryMarkSource(TELEMETRY_SRC_ORION, p_msg->timestamp);
+  telemetry.signal.last_update_ms = p_msg->timestamp;
+  return true;
+}
+
+/* 0x447 — 팩 전압과 전류. */
+static bool telemetryDecodeOrionPack(const can_msg_t *p_msg)
 {
   uint16_t raw;
 
   if ((p_msg->id_type != CAN_STD) ||
-      (p_msg->id != TELEMETRY_ORION_CAN_ID) ||
-      (p_msg->length < 8U))
+      (p_msg->id != TELEMETRY_ORION_PACK_CAN_ID) ||
+      (p_msg->length < 4U))
   {
     return false;
   }
@@ -316,17 +407,7 @@ static bool telemetryDecodeOrion(const can_msg_t *p_msg)
       (int32_t)(int16_t)raw * TELEMETRY_ORION_CURR_MA_PER_BIT;
   telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BMS_PACK_MA;
 
-  raw = telemetryReadU16Be(&p_msg->data[4]);
-  telemetry.signal.bms_soc_permille =
-      (uint16_t)((int32_t)raw * TELEMETRY_ORION_SOC_PERMILLE_PER_BIT);
-  telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BMS_SOC_PERMILLE;
-
-  raw = telemetryReadU16Be(&p_msg->data[6]);
-  telemetry.signal.bms_max_temp_decic =
-      (int16_t)((int32_t)(int16_t)raw * TELEMETRY_ORION_TEMP_DECIC_PER_BIT);
-  telemetry.signal.valid_mask |= TELEMETRY_SIGNAL_BMS_MAX_TEMP_DECIC;
-
-  telemetryMarkSource(TELEMETRY_SRC_ORION, p_msg->timestamp);
+  telemetryMarkSource(TELEMETRY_SRC_ORION_PACK, p_msg->timestamp);
   telemetry.signal.last_update_ms = p_msg->timestamp;
   return true;
 }
@@ -604,6 +685,7 @@ static void telemetryDecodeCan(const can_msg_t *p_msg)
   }
 
   (void)telemetryDecodeOrion(p_msg);
+  (void)telemetryDecodeOrionPack(p_msg);
   (void)telemetryDecodeOrionCell(p_msg);
   (void)telemetryDecodeBamocar(p_msg);
 }
@@ -648,7 +730,7 @@ bool telemetryConfigCanFilter(uint8_t ch)
   /*
    * canOpen() 은 뱅크 0(표준)과 1(확장)에 전체 통과 필터를 깔고 나온다.
    * 그대로 두면 버스에 흐르는 모든 프레임이 인터럽트를 걸고 큐를 먹는다.
-   * 우리가 실제로 읽는 것은 아래 셋뿐이므로 그 둘을 덮어쓰고 하나를 더 건다.
+   * 우리가 실제로 읽는 것은 아래 넷뿐이므로 그 둘을 덮어쓰고 둘을 더 건다.
    */
   if (canConfigFilter(ch, 0, CAN_STD, CAN_ID_MASK,
                       TELEMETRY_ORION_CAN_ID, 0x7FFU) != true)
@@ -664,6 +746,12 @@ bool telemetryConfigCanFilter(uint8_t ch)
 
   if (canConfigFilter(ch, 2, CAN_STD, CAN_ID_MASK,
                       BAMOCAR_CAN_DEFAULT_TX_ID, 0x7FFU) != true)
+  {
+    ret = false;
+  }
+
+  if (canConfigFilter(ch, 3, CAN_STD, CAN_ID_MASK,
+                      TELEMETRY_ORION_PACK_CAN_ID, 0x7FFU) != true)
   {
     ret = false;
   }
@@ -696,6 +784,52 @@ bool telemetryInit(void)
 #endif
 
   return true;
+}
+
+/*
+ * 소스별로 그 소스만이 세우는 신호 비트. 순서는 telemetry_src_t 와 같다.
+ *
+ * 셀 브로드캐스트(0x036)는 0 이다 — 최소 셀 전압에는 스캔 완성 규칙에 묶인
+ * 자체 타임아웃이 이미 있고, 그 둘을 겹쳐 걸면 서로 지운다.
+ */
+static const uint32_t telemetry_src_signal_mask[TELEMETRY_SRC_MAX] =
+{
+  TELEMETRY_SIGNAL_BMS_SOC_PERMILLE |
+      TELEMETRY_SIGNAL_BMS_MAX_TEMP_DECIC |
+      TELEMETRY_SIGNAL_BMS_MIN_TEMP_DECIC |
+      TELEMETRY_SIGNAL_BMS_POWER,
+
+  TELEMETRY_SIGNAL_BMS_PACK_MV |
+      TELEMETRY_SIGNAL_BMS_PACK_MA,
+
+  0U,
+
+  TELEMETRY_SIGNAL_BAMOCAR_RPM |
+      TELEMETRY_SIGNAL_BAMOCAR_SPEED_FILT_RPM |
+      TELEMETRY_SIGNAL_BAMOCAR_DC_BUS_MV |
+      TELEMETRY_SIGNAL_BAMOCAR_MOTOR_TEMP_DECIC |
+      TELEMETRY_SIGNAL_BAMOCAR_IGBT_TEMP_DECIC |
+      TELEMETRY_SIGNAL_BAMOCAR_STATUS |
+      TELEMETRY_SIGNAL_BAMOCAR_ERROR_WARNING |
+      TELEMETRY_SIGNAL_BAMOCAR_TORQUE_RAW,
+};
+
+/* 조용해진 소스의 신호를 무효로 돌린다. 호출자가 임계구역을 잡는다. */
+static void telemetryExpireStaleSources(uint32_t now_ms)
+{
+  for (uint32_t i = 0U; i < (uint32_t)TELEMETRY_SRC_MAX; i++)
+  {
+    if ((telemetry_src_signal_mask[i] == 0U) ||
+        (telemetry.src[i].frame_cnt == 0U))
+    {
+      continue;
+    }
+
+    if ((now_ms - telemetry.src[i].last_ms) >= TELEMETRY_SRC_TIMEOUT_MS)
+    {
+      telemetry.signal.valid_mask &= ~telemetry_src_signal_mask[i];
+    }
+  }
 }
 
 void telemetryUpdate(void)
@@ -740,6 +874,8 @@ void telemetryUpdate(void)
     telemetry.signal.valid_mask &= ~TELEMETRY_SIGNAL_BMS_MIN_CELL_MV;
   }
 
+  telemetryExpireStaleSources(millis());
+
   telemetryExitCritical(primask);
 }
 
@@ -772,11 +908,12 @@ static void cliTelemetry(cli_args_t *args)
   {
     static const char *src_name[TELEMETRY_SRC_MAX] =
     {
-      "orion", "cell", "bamocar"
+      "bms", "pack", "cell", "bamocar"
     };
     static const uint32_t src_id[TELEMETRY_SRC_MAX] =
     {
       TELEMETRY_ORION_CAN_ID,
+      TELEMETRY_ORION_PACK_CAN_ID,
       TELEMETRY_ORION_CELL_CAN_ID,
       BAMOCAR_CAN_DEFAULT_TX_ID,
     };
@@ -791,6 +928,18 @@ static void cliTelemetry(cli_args_t *args)
               (unsigned long)telemetry.signal.valid_mask);
     cliPrintf("storage    : external (TMA-1/ESP)\n");
 
+    /* 셀 스캔이 학습한 팩의 셀 수. 팩 전압을 셀 평균으로 나눠 맞춰 볼 때
+     * 쓴다 — 어느 바이트가 팩 전압인지 역산하는 데 이만한 단서가 없다. */
+    if (telemetry.cell_expected_last_id_valid == true)
+    {
+      cliPrintf("cells      : %u\n",
+                (unsigned int)telemetry.cell_expected_last_id + 1U);
+    }
+    else
+    {
+      cliPrintf("cells      : -- (scan not complete yet)\n");
+    }
+
     /*
      * 소스별로 나눠 세면 "값이 안 뜬다"의 원인이 바로 갈린다. 셋 다 0 이면
      * 버스나 우리 쪽 문제, 하나만 0 이면 그 노드가 조용한 것이다.
@@ -804,8 +953,20 @@ static void cliTelemetry(cli_args_t *args)
 
       if (telemetry.src[i].frame_cnt > 0U)
       {
-        cliPrintf(", %lu ms ago\n",
-                  (unsigned long)(now_ms - telemetry.src[i].last_ms));
+        /*
+         * now_ms 는 출력 전에 한 번 찍는데, 이 목록을 UART 로 밀어내는
+         * 동안에도 프레임은 계속 들어와 last_ms 를 미래로 밀어 놓는다.
+         * 그대로 빼면 언더플로우해서 4294967xxx ms 로 보인다. 방금 온
+         * 것이니 0 으로 적는다.
+         */
+        uint32_t age_ms = now_ms - telemetry.src[i].last_ms;
+
+        if ((int32_t)age_ms < 0)
+        {
+          age_ms = 0U;
+        }
+
+        cliPrintf(", %lu ms ago\n", (unsigned long)age_ms);
       }
       else
       {
@@ -853,16 +1014,16 @@ static void cliTelemetry(cli_args_t *args)
     }
 
     /*
-     * 0x36(셀 브로드캐스트)은 오는데 0x6B0 이 0 이면 BMS 도 버스도 살아
-     * 있다는 뜻이다. 0x6B0 은 Orion 의 기본 방송이 아니라 프로파일에서
-     * 직접 짜 넣는 프레임이라, 그 설정이 빠졌을 때 딱 이 모양이 된다.
+     * 셀 브로드캐스트는 오는데 요약 프레임이 안 오는 경우. BMS 도 버스도
+     * 살아 있으니 남는 것은 그 메시지가 프로파일에서 빠졌을 가능성이다.
      */
-    if ((telemetry.src[TELEMETRY_SRC_ORION].frame_cnt == 0U) &&
-        (telemetry.src[TELEMETRY_SRC_ORION_CELL].frame_cnt > 0U))
+    if ((telemetry.src[TELEMETRY_SRC_ORION_CELL].frame_cnt > 0U) &&
+        ((telemetry.src[TELEMETRY_SRC_ORION].frame_cnt == 0U) ||
+         (telemetry.src[TELEMETRY_SRC_ORION_PACK].frame_cnt == 0U)))
     {
-      cliPrintf("hint       : 0x36 arrives but 0x6B0 never does.\n");
-      cliPrintf("             0x6B0 is a user-defined broadcast in the\n");
-      cliPrintf("             Orion profile - check it is enabled.\n");
+      cliPrintf("hint       : 0x036 arrives but 0x446/0x447 does not.\n");
+      cliPrintf("             those are configured broadcasts in the\n");
+      cliPrintf("             BMS profile - check they are enabled.\n");
     }
 
     handled = true;
@@ -882,9 +1043,12 @@ static void cliTelemetry(cli_args_t *args)
     cliPrintf("bms soc    : %u.%u %%\n",
               (unsigned int)(signal.bms_soc_permille / 10U),
               (unsigned int)(signal.bms_soc_permille % 10U));
-    cliPrintf("bms temp   : %d.%d C\n",
+    cliPrintf("bms temp   : %d.%d C (min %d.%d C)\n",
               (int)(signal.bms_max_temp_decic / 10),
-              (int)abs(signal.bms_max_temp_decic % 10));
+              (int)abs(signal.bms_max_temp_decic % 10),
+              (int)(signal.bms_min_temp_decic / 10),
+              (int)abs(signal.bms_min_temp_decic % 10));
+    cliPrintf("bms power  : %u raw\n", (unsigned int)signal.bms_power_raw);
     cliPrintf("bms min V  : %u.%03u V\n",
               (unsigned int)(signal.bms_min_cell_mv / 1000U),
               (unsigned int)(signal.bms_min_cell_mv % 1000U));
@@ -914,13 +1078,243 @@ static void cliTelemetry(cli_args_t *args)
               (int)abs(signal.bamocar_igbt_temp_decic % 10));
     cliPrintf("bam status : 0x%08lX\n",
               (unsigned long)signal.bamocar_status);
-    cliPrintf("bam error  : 0x%08lX\n",
-              (unsigned long)signal.bamocar_error_warning);
+    /*
+     * 0x8F(REGID_LOGIC_ERR_BITMAP)는 regid.txt 상 isHighLow=1 이다. 32 비트
+     * 하나가 아니라 16 비트 두 벌이고, 아래쪽이 에러, 위쪽이 경고다. 통으로
+     * 찍으면 둘이 구분되지 않아 나눠 적는다.
+     */
+    cliPrintf("bam error  : 0x%08lX (err 0x%04X, warn 0x%04X)\n",
+              (unsigned long)signal.bamocar_error_warning,
+              (unsigned int)(signal.bamocar_error_warning & 0xFFFFU),
+              (unsigned int)((signal.bamocar_error_warning >> 16) & 0xFFFFU));
     handled = true;
   }
 
   /*
-   * 'can filter all' 로 열어 둔 필터를 디코더가 쓰는 세 ID 로 되돌린다.
+   * 버스에 실제로 흐르는 ID 를 모아 센다.
+   *
+   * 'can read_test' 는 프레임을 오는 족족 UART 로 찍는데, 셀 브로드캐스트만
+   * 초당 200 프레임을 넘겨 115200 bps 로는 감당이 안 된다. 화면이 0x36 으로
+   * 도배되고 정작 찾는 프레임은 밀린다. 그래서 여기서는 찍지 않고 세기만
+   * 하다가 끝에 한 번 요약한다.
+   *
+   * 마지막 프레임의 바이트를 같이 남긴다. ID 만 알아서는 디코더를 못 짜고,
+   * 어느 바이트에 무엇이 실려 오는지 봐야 하기 때문이다.
+   */
+  if ((args->argc == 1) && args->isStr(0, "scan"))
+  {
+    enum { SCAN_ID_MAX = 24, SCAN_MS = 3000U };
+
+    struct
+    {
+      uint32_t id;
+      uint32_t cnt;
+      uint8_t  ext;
+      uint8_t  length;
+      uint8_t  data[8];
+    } seen[SCAN_ID_MAX];
+
+    uint32_t  seen_cnt = 0U;
+    uint32_t  missed_id = 0U;
+    uint32_t  total = 0U;
+    uint32_t  start_ms;
+    can_msg_t msg;
+    uint8_t   ch = telemetry.signal.can_ch;
+
+    if (canIsOpen(ch) != true)
+    {
+      cliPrintf("can ch %d is not open\n", ch);
+      return;
+    }
+
+    /* 전체통과로 열어야 디코더가 안 보는 ID 까지 잡힌다. */
+    (void)canConfigFilter(ch, 0, CAN_STD, CAN_ID_MASK, 0x000, 0x000);
+    (void)canConfigFilter(ch, 1, CAN_EXT, CAN_ID_MASK, 0x000, 0x000);
+
+    /* 필터를 넓히기 전에 쌓여 있던 것은 표본에서 뺀다. */
+    while (canMsgAvailable(ch) > 0U)
+    {
+      (void)canMsgRead(ch, &msg);
+    }
+
+    cliPrintf("scanning %lu ms ...\n", (unsigned long)SCAN_MS);
+
+    start_ms = millis();
+    while ((millis() - start_ms) < SCAN_MS)
+    {
+      uint32_t i;
+
+      if (canMsgAvailable(ch) == 0U)
+      {
+        continue;
+      }
+
+      (void)canMsgRead(ch, &msg);
+      total++;
+
+      for (i = 0U; i < seen_cnt; i++)
+      {
+        if ((seen[i].id == msg.id) &&
+            (seen[i].ext == (uint8_t)(msg.id_type == CAN_EXT)))
+        {
+          break;
+        }
+      }
+
+      if (i == seen_cnt)
+      {
+        if (seen_cnt >= (uint32_t)SCAN_ID_MAX)
+        {
+          missed_id++;
+          continue;
+        }
+        seen[i].id  = msg.id;
+        seen[i].ext = (uint8_t)(msg.id_type == CAN_EXT);
+        seen[i].cnt = 0U;
+        seen_cnt++;
+      }
+
+      seen[i].cnt++;
+      seen[i].length = (msg.length > 8U) ? 8U : msg.length;
+      for (uint8_t b = 0U; b < seen[i].length; b++)
+      {
+        seen[i].data[b] = msg.data[b];
+      }
+    }
+
+    /* 디코더가 보는 세 ID 로 되돌린다. 안 되돌리면 부팅 전까지 열린 채다. */
+    (void)telemetryConfigCanFilter(ch);
+
+    cliPrintf("%lu frames, %lu ids\n",
+              (unsigned long)total, (unsigned long)seen_cnt);
+
+    for (uint32_t i = 0U; i < seen_cnt; i++)
+    {
+      cliPrintf("  0x%03X %s L%d x%5lu :",
+                (unsigned int)seen[i].id,
+                (seen[i].ext != 0U) ? "ext" : "std",
+                (int)seen[i].length,
+                (unsigned long)seen[i].cnt);
+
+      for (uint8_t b = 0U; b < seen[i].length; b++)
+      {
+        cliPrintf(" %02X", (unsigned int)seen[i].data[b]);
+      }
+      cliPrintf("\n");
+    }
+
+    if (missed_id > 0U)
+    {
+      cliPrintf("  (%lu frames of further ids not listed)\n",
+                (unsigned long)missed_id);
+    }
+
+    cliPrintf("filter restored to the decoded ids\n");
+    handled = true;
+  }
+
+  /*
+   * ID 하나를 지목해 바이트가 바뀔 때만 찍는다.
+   *
+   * 어느 바이트에 무엇이 실려 오는지 알아내는 용도다. 매 프레임을 다 찍으면
+   * 같은 줄이 초당 수십 개씩 흘러가 눈으로 못 쫓는데, 바뀐 것만 남기면
+   * 움직이는 바이트(전압/전류/SOC)와 고정 바이트가 바로 갈린다. 바뀐
+   * 바이트 앞에는 '*' 를 붙인다.
+   *
+   * 아무 키나 누르면 끝나고 필터는 되돌아간다.
+   */
+  if ((args->argc == 2) && args->isStr(0, "watch"))
+  {
+    uint32_t    want_id = (uint32_t)args->getData(1);
+    CanIdType_t id_type = (want_id > 0x7FFU) ? CAN_EXT : CAN_STD;
+    uint32_t    id_mask = (id_type == CAN_EXT) ? 0x1FFFFFFFU : 0x7FFU;
+    uint8_t     ch = telemetry.signal.can_ch;
+    can_msg_t   msg;
+    uint8_t     prev[8];
+    uint8_t     prev_len = 0U;
+    bool        have_prev = false;
+    uint32_t    seen = 0U;
+
+    if (canIsOpen(ch) != true)
+    {
+      cliPrintf("can ch %d is not open\n", ch);
+      return;
+    }
+
+    /*
+     * 필터 뱅크를 모두 이 ID 로 덮는다. 뱅크를 끄는 길이 없으므로, 남겨 두면
+     * 디코더가 쓰던 ID 가 같이 들어와 화면이 섞인다.
+     */
+    for (uint8_t bank = 0U; bank < 4U; bank++)
+    {
+      (void)canConfigFilter(ch, bank, id_type, CAN_ID_MASK, want_id, id_mask);
+    }
+
+    while (canMsgAvailable(ch) > 0U)
+    {
+      (void)canMsgRead(ch, &msg);
+    }
+
+    cliPrintf("watching 0x%03X (%s). press any key to stop.\n",
+              (unsigned int)want_id, (id_type == CAN_EXT) ? "ext" : "std");
+
+    while (cliKeepLoop())
+    {
+      uint8_t len;
+      bool    changed;
+
+      if (canMsgAvailable(ch) == 0U)
+      {
+        continue;
+      }
+
+      (void)canMsgRead(ch, &msg);
+
+      if (msg.id != want_id)
+      {
+        continue;
+      }
+
+      seen++;
+      len = (msg.length > 8U) ? 8U : msg.length;
+      changed = (have_prev != true) || (prev_len != len);
+
+      for (uint8_t b = 0U; (b < len) && (changed != true); b++)
+      {
+        if (prev[b] != msg.data[b])
+        {
+          changed = true;
+        }
+      }
+
+      if (changed != true)
+      {
+        continue;
+      }
+
+      cliPrintf("%5lu L%d :", (unsigned long)seen, (int)len);
+
+      for (uint8_t b = 0U; b < len; b++)
+      {
+        bool diff = (have_prev == true) && (prev_len == len) &&
+                    (prev[b] != msg.data[b]);
+
+        cliPrintf("%c%02X", diff ? '*' : ' ', (unsigned int)msg.data[b]);
+        prev[b] = msg.data[b];
+      }
+      cliPrintf("\n");
+
+      prev_len = len;
+      have_prev = true;
+    }
+
+    (void)telemetryConfigCanFilter(ch);
+    cliPrintf("\n%lu frames seen. filter restored.\n", (unsigned long)seen);
+    handled = true;
+  }
+
+  /*
+   * 'can filter all' 로 열어 둔 필터를 디코더가 쓰는 ID 들로 되돌린다.
    * 재부팅해도 같은 상태가 되지만, 버스를 들여다보다 바로 정상 동작으로
    * 돌아오고 싶을 때 전원을 껐다 켤 이유는 없다.
    */
@@ -929,12 +1323,14 @@ static void cliTelemetry(cli_args_t *args)
     bool ok = telemetryConfigCanFilter(telemetry.signal.can_ch);
 
     cliPrintf("filter restore : %s\n", ok ? "ok" : "fail");
-    cliPrintf("  bank 0 : 0x%03X orion\n",
+    cliPrintf("  bank 0 : 0x%03X bms summary\n",
               (unsigned int)TELEMETRY_ORION_CAN_ID);
-    cliPrintf("  bank 1 : 0x%03X orion cell\n",
+    cliPrintf("  bank 1 : 0x%03X bms cell\n",
               (unsigned int)TELEMETRY_ORION_CELL_CAN_ID);
     cliPrintf("  bank 2 : 0x%03X bamocar\n",
               (unsigned int)BAMOCAR_CAN_DEFAULT_TX_ID);
+    cliPrintf("  bank 3 : 0x%03X bms pack v/a\n",
+              (unsigned int)TELEMETRY_ORION_PACK_CAN_ID);
     handled = true;
   }
 
@@ -942,6 +1338,8 @@ static void cliTelemetry(cli_args_t *args)
   {
     cliPrintf("telemetry info\n");
     cliPrintf("telemetry signal\n");
+    cliPrintf("telemetry scan\n");
+    cliPrintf("telemetry watch <id>\n");
     cliPrintf("telemetry filter\n");
   }
 }

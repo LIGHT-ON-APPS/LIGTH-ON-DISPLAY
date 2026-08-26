@@ -26,6 +26,11 @@ extern "C" {
 #define TELEMETRY_SIGNAL_BAMOCAR_STATUS           (1UL << 10)
 #define TELEMETRY_SIGNAL_BAMOCAR_ERROR_WARNING    (1UL << 11)
 #define TELEMETRY_SIGNAL_BAMOCAR_TORQUE_RAW       (1UL << 12)
+/* 13~15 는 DISPLAY_PROTOCOL_TLM_* 에 대응이 없는 자리다. 화면이 읽지 않는
+ * 진단용 신호를 여기에 둔다 — valid_mask 는 변환 없이 그대로 넘어가므로
+ * 화면이 쓰는 비트와 겹치면 안 된다. */
+#define TELEMETRY_SIGNAL_BMS_MIN_TEMP_DECIC       (1UL << 13)
+#define TELEMETRY_SIGNAL_BMS_POWER                (1UL << 14)
 #define TELEMETRY_SIGNAL_BMS_MIN_CELL_MV           (1UL << 16)
 
 typedef struct
@@ -38,6 +43,11 @@ typedef struct
   int32_t  bms_pack_ma;
   uint16_t bms_soc_permille;
   int16_t  bms_max_temp_decic;
+  /* 0x446 이 최고와 함께 실어 보내는 최저 온도. 화면에는 안 쓰고 CLI 에서
+   * 팩 안의 온도 편차를 볼 때만 쓴다. */
+  int16_t  bms_min_temp_decic;
+  /* 0x446 [0..1]. 눈금이 확인되지 않아 원시값 그대로 둔다. */
+  uint16_t bms_power_raw;
   uint16_t bms_min_cell_mv;
   uint32_t bms_status;
 

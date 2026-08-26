@@ -947,7 +947,13 @@ void Screen1View::updateTelemetry(bool fresh,
     {
         const int32_t boundedSoc =
             haveSoc ? clampValue(socPerMille, 0, 1000) : 0;
-        const int32_t percent = (boundedSoc + 5) / 10;
+        /*
+         * 반올림하지 않고 버린다. BMS 가 99.5 % 를 주면 반올림한 100 % 는
+         * 만충으로 읽히는데, 실제로는 그 위에 아직 0.5 % 가 남아 있다는
+         * 뜻이라 방향이 반대다. 잔량은 모자란 쪽으로 틀리는 편이 안전하고,
+         * 100 % 는 BMS 가 정말 100 % 를 말할 때만 나와야 한다.
+         */
+        const int32_t percent = boundedSoc / 10;
         const touchgfx::colortype textColor =
             haveSoc ? rgb(FG_R, FG_G, FG_B) : rgb(DIM_R, DIM_G, DIM_B);
 
