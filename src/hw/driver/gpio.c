@@ -20,11 +20,19 @@ typedef struct
 
 } button_tbl_t;
 
+/*
+ * Display RST 의 초기값이 LOW 인 것은 의도한 것이다.
+ *
+ * gpioInit() 은 lcdInit() 보다 먼저 도는데(hw.c), 여기서 RST 를 HIGH 로 올려 버리면
+ * LCD 모듈 전원이 아직 올라오는 중에 리셋이 풀린 상태가 된다. 이 보드는 디스플레이
+ * 보드가 LCD 모듈보다 먼저 살아나는 배선이라 그 창이 실제로 생긴다. 부팅 직후부터
+ * 리셋을 걸어 두었다가 ili9488Reset() 이 전원 안정을 기다린 뒤 풀어 주는 편이 맞다.
+ */
 button_tbl_t gpio_tbl[GPIO_MAX_CH] =
 {
     {GPIOA, GPIO_PIN_10, _DEF_OUTPUT , GPIO_PIN_SET, GPIO_PIN_RESET, _DEF_LOW},                  // 1. Display Led
 	{GPIOB, GPIO_PIN_5, _DEF_OUTPUT , GPIO_PIN_SET, GPIO_PIN_RESET, _DEF_HIGH},                  // 2. Display DC
-	{GPIOB, GPIO_PIN_6, _DEF_OUTPUT , GPIO_PIN_SET, GPIO_PIN_RESET, _DEF_HIGH},                  // 3. Display RST
+	{GPIOB, GPIO_PIN_6, _DEF_OUTPUT , GPIO_PIN_SET, GPIO_PIN_RESET, _DEF_LOW},                   // 3. Display RST
 	{GPIOB, GPIO_PIN_7, _DEF_OUTPUT , GPIO_PIN_SET, GPIO_PIN_RESET, _DEF_HIGH},                  // 4. Display CS
 };
 

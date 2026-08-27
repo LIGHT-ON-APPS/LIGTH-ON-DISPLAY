@@ -153,7 +153,9 @@ bool ili9488Reset(void)
 
   gpioPinWrite(ILI9488_DC_CH,  _DEF_HIGH);
   gpioPinWrite(ILI9488_CS_CH,  _DEF_HIGH);
-  gpioPinWrite(ILI9488_RST_CH, _DEF_HIGH);
+
+  /* 전원이 올라오는 동안은 리셋을 걸어 둔다. 아래 대기 구간 설명 참조. */
+  gpioPinWrite(ILI9488_RST_CH, _DEF_LOW);
 
   if (spiBegin(spi_ch) != true)
   {
@@ -166,14 +168,19 @@ bool ili9488Reset(void)
   spiAttachTxInterrupt(spi_ch, TransferDoneISR);
 
   /*
-   * 리셋을 때리기 전에 패널 전원이 올라오기를 기다린다.
+   * 리셋을 건 채로 패널 전원이 올라오기를 기다린다.
    *
    * 디스플레이 보드가 LCD 모듈보다 먼저 살아나는 배선이라, 부팅하자마자 RST 를
    * 토글하면 컨트롤러는 아직 전원이 서지 않은 채로 그 펄스를 흘려보낸다. 그
    * 뒤에 오는 레지스터 설정도 함께 사라지므로 화면은 끝까지 검은 채로 남는다.
    * 백라이트는 컨트롤러를 거치지 않고 켜지기 때문에, 밖에서 보면 '불은 들어오는데
-   * 화면만 안 나오는' 모습이 된다. 여기서 한 번 기다려 두면 이후 리셋 펄스와
-   * 초기화가 모두 살아 있는 컨트롤러로 들어간다.
+   * 화면만 안 나오는' 모습이 된다.
+   *
+   * RST 를 HIGH 로 둔 채 기다리지 않는 이유가 여기 있다. 리셋이 풀린 상태로 전원이
+   * 천천히 올라오면 컨트롤러는 불안정한 전압에서 제 나름의 파워온 리셋을 진행하다가
+   * 어중간한 상태로 자리잡는다. 전원이 서는 동안 리셋을 붙잡고 있다가 다 올라온 뒤에
+   * 풀어 주는 것이 정석이고, gpio.c 의 RST 초기값을 LOW 로 둔 것도 같은 이유다
+   * (gpioInit 이 lcdInit 보다 먼저 돌기 때문에 거기서부터 잡아 두어야 한다).
    */
   delay(ILI9488_POWER_SETTLE_MS);
 
@@ -197,8 +204,17 @@ bool ili9488Reset(void)
    */
   for (uint32_t i = 0U; i < ILI9488_INIT_ATTEMPTS; i++)
   {
-    gpioPinWrite(ILI9488_RST_CH, _DEF_LOW);
-    delay(ILI9488_RESET_LOW_MS);
+    /*
+     * 첫 회차는 위 대기 구간 내내 RST 가 LOW 였으므로 펄스 폭이 이미 300ms 확보돼
+     * 있다. 다시 내릴 것 없이 바로 풀면 된다. 두 번째 회차부터는 직전 회차가 RST 를
+     * HIGH 로 올려 두었으니 새로 펄스를 만들어야 한다.
+     */
+    if (i > 0U)
+    {
+      gpioPinWrite(ILI9488_RST_CH, _DEF_LOW);
+      delay(ILI9488_RESET_LOW_MS);
+    }
+
     gpioPinWrite(ILI9488_RST_CH, _DEF_HIGH);
     delay(ILI9488_RESET_WAIT_MS);
 
